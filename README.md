@@ -2,10 +2,10 @@
 This repository contains the results of mandatory practice works (MPWs) for MSE module Deep Learning (Spring 2026)
 
 ## Part 1: CNN 
-Timeframe: From 18.03.2026 until 15.03.2026
+Timeframe: From 18.03.2026 until 15.04.2026
 
 ## Part 2: CG
-Timeframe: From 15.04.2026 until 06.03.2026
+Timeframe: From 15.04.2026 until 06.05.2026
 
 ## Part 3: AL
 Timeframe: From 06.05.2026 until 27.05.2026
