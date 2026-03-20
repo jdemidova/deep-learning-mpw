@@ -1,0 +1,39 @@
+[project]
+name = "deep-learning-mpw"
+version = "0.1.0"
+description = "Notebook-driven student project for the Deep Learning module."
+readme = "README.md"
+requires-python = ">=3.12,<3.13"
+authors = [
+  { name = "jdemid" },
+]
+dependencies = [
+  "pandas>=3.0.1",
+]
+
+[dependency-groups]
+dev = [
+  "ipykernel>=6.29.5",
+  "pre-commit>=4.2.0",
+  "pytest>=8.3.5",
+  "ruff>=0.11.2",
+]
+
+[build-system]
+requires = ["hatchling>=1.27.0"]
+build-backend = "hatchling.build"
+
+[tool.uv]
+package = false
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = ["src"]
+
+[tool.ruff.lint]
+select = [
+  "E",
+  "F",
+  "I",
+]
