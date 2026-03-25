@@ -1,5 +1,9 @@
 .DS_Store
 .ipynb_checkpoints/
+01_MPW-CNN/notebooks/wandb/
+01_MPW-CNN/notebooks/gradcam_outputs/
+*.pt
+
 
 # Python
 __pycache__/
