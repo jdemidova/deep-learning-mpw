@@ -1,5 +1,5 @@
-import torch
 import torch.nn as nn
+import torch
 
 from src.cnn.cnn_registry import register_model
 
@@ -93,9 +93,11 @@ class ShallowModel(nn.Module):
     def forward(self, x):
         return self.seq(x)
 
+# =========================================================
+# Building blocks
+# =========================================================
 
 # A convolutional block with optional pooling and dropout, can be reused to build deeper CNNs
-@register_model("conv_block")
 class ConvBlock(nn.Module):
     """
     A basic convolutional block consisting of Conv2d -> BatchNorm2d -> ReLU, with optional MaxPool2d and Dropout2d.
@@ -127,16 +129,15 @@ class ConvBlock(nn.Module):
         return self.block(x)
 
 
-
-# Construction of the main CNN model with variable depth using the ConvBlock defined above
 @register_model("depth_cnn")
+# Construction of the main CNN model with variable depth using the ConvBlock defined above
 class DepthCNN(nn.Module):
     """
     CNN with configurable number of convolutional layers.
     """
     def __init__(
         self,
-        depth: int,
+        depth: int = 12,
         in_channels: int = 3,
         num_classes: int = 10,
         base_channels: int = 32,
@@ -195,3 +196,5 @@ class DepthCNN(nn.Module):
         x = self.features(x)
         x = self.classifier(x)
         return x
+    
+

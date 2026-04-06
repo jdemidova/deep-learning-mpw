@@ -784,3 +784,27 @@ def load_model_for_inference(path, filename, map_location="cpu"):
     model.load_state_dict(checkpoint["state_dict"])
     model.eval()
     return model, checkpoint
+
+# ============================================================================
+# Model constructor
+# ============================================================================
+
+# builder function
+def builder(model_name: str, depth: int = 12, num_classes: int = 10, in_channels: int = 3):
+    """
+    Returns a hardcoded CNN configuration by name.
+    """
+
+    model_name = model_name.lower()
+
+    if model_name == "cnn_small":
+        return DepthCNN(
+            depth=depth,
+            in_channels=in_channels,
+            num_classes=num_classes,
+            base_channels=32,
+            max_channels=256,
+            dropout_conv=0.0,
+            dropout_fc=0.5,
+            inputsize=224,
+        )
