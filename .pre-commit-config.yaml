@@ -1,7 +1,9 @@
 repos:
-  - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.11.2
+  - repo: local
     hooks:
-      - id: ruff
-        args: [--fix]
-      - id: ruff-format
+      - id: validate-notebooks
+        name: validate notebooks
+        entry: uv run python scripts/validate_notebooks.py
+        language: system
+        pass_filenames: false
+        files: \.ipynb$
