@@ -10,3 +10,5 @@ TRAIN_DIR = DATASET_DIR / "train"
 VAL_DIR = DATASET_DIR / "validate"
 
 SPLIT_DIR = DATA_DIR / "split"
+
+CKPT_DIR = DATA_DIR / "checkpoints"

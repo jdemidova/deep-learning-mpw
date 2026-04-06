@@ -745,3 +745,42 @@ def run_experiment(cfg: ExperimentConfig):
     )
 
     return model, history, result
+
+def save_checkpoint(path, filename, model, cfg, extra=None):
+
+    payload = {
+        "model_name": cfg.model.name,
+        "run_name": cfg.wandb.run_name,
+        "model_kwargs": cfg.model.kwargs,
+        "state_dict": model.state_dict(),
+    }
+    if extra:
+        payload.update(extra)
+    torch.save(payload, Path(path) / filename)
+
+def log_checkpoint_artifact(path, filename, cfg, result=None, aliases=None):
+    artifact = wandb.Artifact(
+        name=f"{cfg.model.name}_checkpoint",
+        type="model",
+        metadata={
+            "model_name": cfg.model.name,
+            "run_name": cfg.wandb.run_name,
+            "model_kwargs": cfg.model.kwargs,
+        },
+    )
+    artifact.add_file(Path(path) / filename)
+    if aliases is not None:
+        artifact.add_file(aliases)
+    wandb.log_artifact(artifact, aliases=aliases or ["latest"])
+
+def load_model_for_inference(path, filename, map_location="cpu"):
+    checkpoint = torch.load(Path(path) / filename, map_location=map_location, weights_only=True)
+
+    cfg = ExperimentConfig()
+    cfg.model.name = checkpoint["model_name"]
+    cfg.model.kwargs = checkpoint["model_kwargs"]
+
+    model = build_model(cfg.model)
+    model.load_state_dict(checkpoint["state_dict"])
+    model.eval()
+    return model, checkpoint

@@ -1,3 +1,4 @@
+import torch
 import torch.nn as nn
 
 from src.cnn.cnn_registry import register_model
