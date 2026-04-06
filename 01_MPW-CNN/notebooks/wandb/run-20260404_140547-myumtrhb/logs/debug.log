@@ -1,0 +1,33 @@
+2026-04-04 14:05:47,622 INFO    MainThread:31164 [wandb_setup.py:_flush():81] Current SDK version is 0.25.0
+2026-04-04 14:05:47,622 INFO    MainThread:31164 [wandb_setup.py:_flush():81] Configure stats pid to 31164
+2026-04-04 14:05:47,622 INFO    MainThread:31164 [wandb_setup.py:_flush():81] Loading settings from environment variables
+2026-04-04 14:05:47,622 INFO    MainThread:31164 [wandb_init.py:setup_run_log_directory():717] Logging user logs to c:\Users\lucas\Documents\MSE\4_Semester\deep-learning-mpw\01_MPW-CNN\notebooks\wandb\run-20260404_140547-myumtrhb\logs\debug.log
+2026-04-04 14:05:47,623 INFO    MainThread:31164 [wandb_init.py:setup_run_log_directory():718] Logging internal logs to c:\Users\lucas\Documents\MSE\4_Semester\deep-learning-mpw\01_MPW-CNN\notebooks\wandb\run-20260404_140547-myumtrhb\logs\debug-internal.log
+2026-04-04 14:05:47,623 INFO    MainThread:31164 [wandb_init.py:monkeypatch_ipython():636] configuring jupyter hooks <wandb.sdk.wandb_init._WandbInit object at 0x000001693D8D80D0>
+2026-04-04 14:05:47,623 INFO    MainThread:31164 [wandb_init.py:init():844] calling init triggers
+2026-04-04 14:05:47,623 INFO    MainThread:31164 [wandb_init.py:init():849] wandb.init called with sweep_config: {}
+config: {'in_channels': 3, 'num_classes': 10, 'depths': (14, 16, 18, 20), 'batch_size': 64, 'epochs': 100, 'lr': 0.001, 'weight_decay': 0.0001, 'base_channels': 32, 'max_channels': 256, 'dropout': 0.0, 'do': 0.5, 'num_workers': 0, 'pin_memory': True, 'device': 'cuda', 'use_wandb': True, 'wandb_project': 'MPW-CNN', 'wandb_entity': 'MSE_DeLearn_SPR26', 'wandb_mode': 'online', 'wandb_watch': False, 'wandb_log_freq': 100, 'depth': 14, 'num_parameters': 4717802, 'optimizer': 'Adam', 'loss': 'CrossEntropyLoss', '_wandb': {}}
+2026-04-04 14:05:47,623 INFO    MainThread:31164 [wandb_init.py:init():892] starting backend
+2026-04-04 14:05:51,571 INFO    MainThread:31164 [wandb_init.py:init():895] sending inform_init request
+2026-04-04 14:05:51,590 INFO    MainThread:31164 [wandb_init.py:init():903] backend started and connected
+2026-04-04 14:05:51,613 INFO    MainThread:31164 [wandb_run.py:_label_probe_notebook():1333] probe notebook
+2026-04-04 14:05:51,614 INFO    MainThread:31164 [wandb_run.py:_label_probe_notebook():1343] Unable to probe notebook: 'charmap' codec can't decode byte 0x81 in position 17956: character maps to <undefined>
+2026-04-04 14:05:51,615 INFO    MainThread:31164 [wandb_init.py:init():973] updated telemetry
+2026-04-04 14:05:51,755 INFO    MainThread:31164 [wandb_init.py:init():997] communicating run to backend with 300.0 second timeout
+2026-04-04 14:05:52,901 INFO    MainThread:31164 [wandb_init.py:init():1042] starting run threads in backend
+2026-04-04 14:05:53,017 INFO    MainThread:31164 [wandb_run.py:_console_start():2524] atexit reg
+2026-04-04 14:05:53,017 INFO    MainThread:31164 [wandb_run.py:_redirect():2373] redirect: wrap_raw
+2026-04-04 14:05:53,017 INFO    MainThread:31164 [wandb_run.py:_redirect():2442] Wrapping output streams.
+2026-04-04 14:05:53,017 INFO    MainThread:31164 [wandb_run.py:_redirect():2465] Redirects installed.
+2026-04-04 14:05:53,021 INFO    MainThread:31164 [wandb_init.py:init():1082] run started, returning control to user process
+2026-04-04 14:06:15,744 INFO    MainThread:31164 [wandb_init.py:_post_run_cell_hook():606] [no run ID] resuming backend
+2026-04-04 14:06:25,945 INFO    MainThread:31164 [jupyter.py:save_ipynb():362] [no run ID] not saving jupyter notebook
+2026-04-04 14:06:25,945 INFO    MainThread:31164 [wandb_init.py:_pre_run_cell_hook():595] [no run ID] pausing backend
+2026-04-04 14:06:26,520 INFO    MainThread:31164 [wandb_run.py:_finish():2291] finishing run MSE_DeLearn_SPR26/MPW-CNN/myumtrhb
+2026-04-04 14:06:27,333 INFO    MainThread:31164 [jupyter.py:save_history():435] not saving jupyter history
+2026-04-04 14:06:27,334 INFO    MainThread:31164 [jupyter.py:save_ipynb():362] not saving jupyter notebook
+2026-04-04 14:06:27,334 INFO    MainThread:31164 [wandb_init.py:_jupyter_teardown():621] cleaning up jupyter logic
+2026-04-04 14:06:27,334 INFO    MainThread:31164 [wandb_run.py:_atexit_cleanup():2490] got exitcode: 0
+2026-04-04 14:06:27,334 INFO    MainThread:31164 [wandb_run.py:_restore():2472] restore
+2026-04-04 14:06:27,334 INFO    MainThread:31164 [wandb_run.py:_restore():2478] restore done
+2026-04-04 14:06:28,500 INFO    MainThread:31164 [wandb_run.py:_footer_sync_info():3868] logging synced files

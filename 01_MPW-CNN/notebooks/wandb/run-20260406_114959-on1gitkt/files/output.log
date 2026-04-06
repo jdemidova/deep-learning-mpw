@@ -1,0 +1,32 @@
+Epoch [01/50] | train_loss=1.7695 | train_acc=0.3736 | val_loss=1.5538 | val_acc=0.4498 | time=54.1s
+Epoch [02/50] | train_loss=1.3655 | train_acc=0.5265 | val_loss=1.3827 | val_acc=0.5145 | time=53.0s
+Epoch [03/50] | train_loss=1.1659 | train_acc=0.5995 | val_loss=1.3366 | val_acc=0.5543 | time=53.1s
+Epoch [04/50] | train_loss=1.0363 | train_acc=0.6473 | val_loss=1.2045 | val_acc=0.5842 | time=53.0s
+Epoch [05/50] | train_loss=0.9165 | train_acc=0.6887 | val_loss=1.0948 | val_acc=0.6053 | time=53.0s
+Epoch [06/50] | train_loss=0.8140 | train_acc=0.7253 | val_loss=0.8867 | val_acc=0.7017 | time=53.1s
+Epoch [07/50] | train_loss=0.7287 | train_acc=0.7560 | val_loss=1.6805 | val_acc=0.5328 | time=52.9s
+Epoch [08/50] | train_loss=0.6535 | train_acc=0.7843 | val_loss=1.0096 | val_acc=0.6613 | time=54.0s
+Epoch [09/50] | train_loss=0.5795 | train_acc=0.8065 | val_loss=0.8691 | val_acc=0.7120 | time=54.5s
+Epoch [10/50] | train_loss=0.5250 | train_acc=0.8286 | val_loss=1.2223 | val_acc=0.6438 | time=54.5s
+Epoch [11/50] | train_loss=0.4597 | train_acc=0.8522 | val_loss=0.9812 | val_acc=0.6618 | time=54.4s
+Epoch [12/50] | train_loss=0.4111 | train_acc=0.8653 | val_loss=0.8073 | val_acc=0.7485 | time=54.6s
+Epoch [13/50] | train_loss=0.3574 | train_acc=0.8862 | val_loss=1.1078 | val_acc=0.6950 | time=54.7s
+Epoch [14/50] | train_loss=0.3063 | train_acc=0.9039 | val_loss=0.6614 | val_acc=0.7853 | time=55.2s
+Epoch [15/50] | train_loss=0.2639 | train_acc=0.9183 | val_loss=1.1245 | val_acc=0.7065 | time=55.4s
+Epoch [16/50] | train_loss=0.2182 | train_acc=0.9348 | val_loss=0.7744 | val_acc=0.7580 | time=55.1s
+Epoch [17/50] | train_loss=0.1929 | train_acc=0.9426 | val_loss=0.9237 | val_acc=0.7192 | time=55.0s
+Epoch [18/50] | train_loss=0.1514 | train_acc=0.9580 | val_loss=1.0001 | val_acc=0.7248 | time=55.5s
+Epoch [19/50] | train_loss=0.1279 | train_acc=0.9653 | val_loss=3.8728 | val_acc=0.4870 | time=55.1s
+Epoch [20/50] | train_loss=0.1040 | train_acc=0.9722 | val_loss=0.6971 | val_acc=0.7772 | time=54.9s
+Epoch [21/50] | train_loss=0.0826 | train_acc=0.9798 | val_loss=0.8449 | val_acc=0.7558 | time=53.5s
+Epoch [22/50] | train_loss=0.0617 | train_acc=0.9870 | val_loss=0.8152 | val_acc=0.7670 | time=52.4s
+Epoch [23/50] | train_loss=0.0525 | train_acc=0.9893 | val_loss=0.8924 | val_acc=0.7622 | time=54.3s
+Epoch [24/50] | train_loss=0.0341 | train_acc=0.9938 | val_loss=0.8635 | val_acc=0.7735 | time=55.1s
+Epoch [25/50] | train_loss=0.0262 | train_acc=0.9968 | val_loss=0.5574 | val_acc=0.8313 | time=54.3s
+Epoch [26/50] | train_loss=0.0209 | train_acc=0.9970 | val_loss=1.1345 | val_acc=0.7448 | time=53.6s
+Epoch [27/50] | train_loss=0.0261 | train_acc=0.9952 | val_loss=0.5190 | val_acc=0.8537 | time=54.1s
+Training dataset size: 24000
+Validation dataset size: 6000
+[34m[1mwandb[0m: [33mWARNING[0m Calling wandb.login() after wandb.init() has no effect.
+
+==== Training with momentum = 0.0 ====

@@ -1,0 +1,28 @@
+{"time":"2026-04-06T17:00:45.7236941+02:00","level":"INFO","msg":"stream: starting","core version":"0.25.0"}
+{"time":"2026-04-06T17:00:45.9906806+02:00","level":"INFO","msg":"stream: created new stream","id":"7gi5vco4"}
+{"time":"2026-04-06T17:00:45.9906806+02:00","level":"INFO","msg":"handler: started","stream_id":"7gi5vco4"}
+{"time":"2026-04-06T17:00:45.9916856+02:00","level":"INFO","msg":"stream: started","id":"7gi5vco4"}
+{"time":"2026-04-06T17:00:45.9916856+02:00","level":"INFO","msg":"writer: started","stream_id":"7gi5vco4"}
+{"time":"2026-04-06T17:00:45.9916856+02:00","level":"INFO","msg":"sender: started","stream_id":"7gi5vco4"}
+{"time":"2026-04-06T17:03:17.1515953+02:00","level":"INFO","msg":"api: retrying HTTP error","status":500,"url":"https://api.wandb.ai/files/MSE_DeLearn_SPR26/MPW-CNN/7gi5vco4/file_stream","body":"{\"error\":\"context deadline exceeded\"}"}
+{"time":"2026-04-06T17:04:14.5998149+02:00","level":"INFO","msg":"api: retrying HTTP error","status":429,"url":"https://api.wandb.ai/files/MSE_DeLearn_SPR26/MPW-CNN/7gi5vco4/file_stream","body":"{\"error\":\"rate limit exceeded: per_run limit on filestream requests\"}"}
+{"time":"2026-04-06T17:05:14.3003796+02:00","level":"INFO","msg":"api: retrying HTTP error","status":429,"url":"https://api.wandb.ai/files/MSE_DeLearn_SPR26/MPW-CNN/7gi5vco4/file_stream","body":"{\"error\":\"rate limit exceeded: per_run limit on filestream requests\"}"}
+{"time":"2026-04-06T17:05:42.6090126+02:00","level":"ERROR","msg":"api: HTTP error","status":401,"method":"POST","url":"https://api.wandb.ai/files/MSE_DeLearn_SPR26/MPW-CNN/7gi5vco4/file_stream"}
+{"time":"2026-04-06T17:05:42.6090126+02:00","level":"ERROR+4","msg":"filestream: fatal error: filestream: failed to upload: 401 Unauthorized url=https://api.wandb.ai/files/MSE_DeLearn_SPR26/MPW-CNN/7gi5vco4/file_stream: {\"error\":\"must be logged in to submit runs\"}"}
+{"time":"2026-04-06T17:47:16.3653294+02:00","level":"INFO","msg":"api: retrying error","error":"Post \"https://api.wandb.ai/graphql\": context deadline exceeded"}
+{"time":"2026-04-06T17:47:21.3630758+02:00","level":"INFO","msg":"api: retrying error","error":"Post \"https://api.wandb.ai/graphql\": context deadline exceeded (Client.Timeout exceeded while awaiting headers)"}
+{"time":"2026-04-06T17:47:48.8295545+02:00","level":"INFO","msg":"api: retrying error","error":"Post \"https://api.wandb.ai/graphql\": net/http: request canceled (Client.Timeout exceeded while awaiting headers)"}
+{"time":"2026-04-06T17:47:53.6400289+02:00","level":"INFO","msg":"api: retrying error","error":"Post \"https://api.wandb.ai/graphql\": net/http: request canceled (Client.Timeout exceeded while awaiting headers)"}
+{"time":"2026-04-06T17:48:22.9385412+02:00","level":"INFO","msg":"api: retrying error","error":"Post \"https://api.wandb.ai/graphql\": net/http: request canceled (Client.Timeout exceeded while awaiting headers)"}
+{"time":"2026-04-06T17:48:28.1662905+02:00","level":"INFO","msg":"api: retrying error","error":"Post \"https://api.wandb.ai/graphql\": net/http: request canceled (Client.Timeout exceeded while awaiting headers)"}
+{"time":"2026-04-06T17:49:01.1214854+02:00","level":"INFO","msg":"api: retrying error","error":"Post \"https://api.wandb.ai/graphql\": context deadline exceeded"}
+{"time":"2026-04-06T17:49:07.1270162+02:00","level":"INFO","msg":"api: retrying error","error":"Post \"https://api.wandb.ai/graphql\": net/http: request canceled (Client.Timeout exceeded while awaiting headers)"}
+{"time":"2026-04-06T17:49:49.6793386+02:00","level":"INFO","msg":"api: retrying error","error":"Post \"https://api.wandb.ai/graphql\": net/http: request canceled (Client.Timeout exceeded while awaiting headers)"}
+{"time":"2026-04-06T17:49:56.1234234+02:00","level":"INFO","msg":"api: retrying error","error":"Post \"https://api.wandb.ai/graphql\": context deadline exceeded"}
+{"time":"2026-04-06T17:50:51.7658541+02:00","level":"INFO","msg":"api: retrying error","error":"Post \"https://api.wandb.ai/graphql\": context deadline exceeded"}
+{"time":"2026-04-06T17:51:52.6514281+02:00","level":"INFO","msg":"fileTransfer: Close: file transfer manager closed"}
+{"time":"2026-04-06T17:51:52.6527774+02:00","level":"INFO","msg":"handler: operation stats","stats":{}}
+{"time":"2026-04-06T17:51:52.6569315+02:00","level":"INFO","msg":"stream: closing","id":"7gi5vco4"}
+{"time":"2026-04-06T17:51:52.6569315+02:00","level":"INFO","msg":"handler: closed","stream_id":"7gi5vco4"}
+{"time":"2026-04-06T17:51:52.6569315+02:00","level":"INFO","msg":"sender: closed","stream_id":"7gi5vco4"}
+{"time":"2026-04-06T17:51:52.6569315+02:00","level":"INFO","msg":"stream: closed","id":"7gi5vco4"}

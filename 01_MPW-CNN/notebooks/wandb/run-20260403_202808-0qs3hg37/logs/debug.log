@@ -1,0 +1,26 @@
+2026-04-03 20:28:08,938 INFO    MainThread:32500 [wandb_init.py:setup_run_log_directory():717] Logging user logs to c:\Users\lucas\Documents\MSE\4_Semester\deep-learning-mpw\01_MPW-CNN\notebooks\wandb\run-20260403_202808-0qs3hg37\logs\debug.log
+2026-04-03 20:28:08,939 INFO    MainThread:32500 [wandb_init.py:setup_run_log_directory():718] Logging internal logs to c:\Users\lucas\Documents\MSE\4_Semester\deep-learning-mpw\01_MPW-CNN\notebooks\wandb\run-20260403_202808-0qs3hg37\logs\debug-internal.log
+2026-04-03 20:28:08,939 INFO    MainThread:32500 [wandb_init.py:monkeypatch_ipython():636] configuring jupyter hooks <wandb.sdk.wandb_init._WandbInit object at 0x00000248FA3C2210>
+2026-04-03 20:28:08,939 INFO    MainThread:32500 [wandb_init.py:init():844] calling init triggers
+2026-04-03 20:28:08,941 INFO    MainThread:32500 [wandb_init.py:init():849] wandb.init called with sweep_config: {}
+config: {'in_channels': 3, 'num_classes': 10, 'depths': (1, 2, 4, 8, 16), 'batch_size': 64, 'epochs': 50, 'lr': 0.001, 'weight_decay': 0.0001, 'base_channels': 32, 'max_channels': 256, 'dropout': 0.0, 'do': 0.5, 'num_workers': 0, 'pin_memory': True, 'device': 'cuda', 'use_wandb': True, 'wandb_project': 'MPW-CNN', 'wandb_entity': 'MSE_DeLearn_SPR26', 'wandb_mode': 'online', 'wandb_watch': False, 'wandb_log_freq': 100, 'depth': 8, 'num_parameters': 1175786, 'optimizer': 'Adam', 'loss': 'CrossEntropyLoss', '_wandb': {}}
+2026-04-03 20:28:08,941 INFO    MainThread:32500 [wandb_init.py:init():892] starting backend
+2026-04-03 20:28:08,941 INFO    MainThread:32500 [wandb_init.py:init():895] sending inform_init request
+2026-04-03 20:28:08,944 INFO    MainThread:32500 [wandb_init.py:init():903] backend started and connected
+2026-04-03 20:28:08,946 INFO    MainThread:32500 [wandb_run.py:_label_probe_notebook():1333] probe notebook
+2026-04-03 20:28:08,947 INFO    MainThread:32500 [wandb_init.py:init():973] updated telemetry
+2026-04-03 20:28:08,953 INFO    MainThread:32500 [wandb_init.py:init():997] communicating run to backend with 300.0 second timeout
+2026-04-03 20:28:09,569 INFO    MainThread:32500 [wandb_init.py:init():1042] starting run threads in backend
+2026-04-03 20:28:09,700 INFO    MainThread:32500 [wandb_run.py:_console_start():2524] atexit reg
+2026-04-03 20:28:09,700 INFO    MainThread:32500 [wandb_run.py:_redirect():2373] redirect: wrap_raw
+2026-04-03 20:28:09,700 INFO    MainThread:32500 [wandb_run.py:_redirect():2442] Wrapping output streams.
+2026-04-03 20:28:09,700 INFO    MainThread:32500 [wandb_run.py:_redirect():2465] Redirects installed.
+2026-04-03 20:28:09,701 INFO    MainThread:32500 [wandb_init.py:init():1082] run started, returning control to user process
+2026-04-03 21:15:02,324 INFO    MainThread:32500 [wandb_run.py:_finish():2291] finishing run MSE_DeLearn_SPR26/MPW-CNN/0qs3hg37
+2026-04-03 21:15:02,325 INFO    MainThread:32500 [jupyter.py:save_history():435] not saving jupyter history
+2026-04-03 21:15:02,325 INFO    MainThread:32500 [jupyter.py:save_ipynb():362] not saving jupyter notebook
+2026-04-03 21:15:02,325 INFO    MainThread:32500 [wandb_init.py:_jupyter_teardown():621] cleaning up jupyter logic
+2026-04-03 21:15:02,325 INFO    MainThread:32500 [wandb_run.py:_atexit_cleanup():2490] got exitcode: 0
+2026-04-03 21:15:02,325 INFO    MainThread:32500 [wandb_run.py:_restore():2472] restore
+2026-04-03 21:15:02,325 INFO    MainThread:32500 [wandb_run.py:_restore():2478] restore done
+2026-04-03 21:15:03,970 INFO    MainThread:32500 [wandb_run.py:_footer_sync_info():3868] logging synced files

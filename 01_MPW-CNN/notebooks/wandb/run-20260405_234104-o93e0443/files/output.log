@@ -1,0 +1,3 @@
+Epoch 01/50 | train_loss=1.9804 | train_acc=0.2726 |  val_loss=1.8652 | val_acc=0.3195 | time=50.6s
+Epoch 02/50 | train_loss=1.6975 | train_acc=0.3809 |  val_loss=1.7394 | val_acc=0.3793 | time=49.3s
+Epoch 03/50 | train_loss=1.4357 | train_acc=0.4915 |  val_loss=1.3737 | val_acc=0.5148 | time=50.0s

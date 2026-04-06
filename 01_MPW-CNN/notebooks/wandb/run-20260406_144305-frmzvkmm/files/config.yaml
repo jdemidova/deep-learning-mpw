@@ -1,0 +1,74 @@
+_wandb:
+    value:
+        cli_version: 0.25.0
+        e:
+            g9733wcbxpef32gmcfv9n9x77uirb3pf:
+                codePath: c:\Users\lucas\Documents\MSE\4_Semester\deep-learning-mpw\01_MPW-CNN\notebooks\CNN-Tuning.ipynb
+                codePathLocal: CNN-Tuning.ipynb
+                cpu_count: 16
+                cpu_count_logical: 32
+                cudaVersion: "13.2"
+                disk:
+                    /:
+                        total: "1999348166656"
+                        used: "407368814592"
+                email: lucas.j.keller98@gmail.com
+                executable: c:\Users\lucas\Documents\MSE\4_Semester\FTP_DeLearn\venv_DeLearn\Scripts\python.exe
+                gpu: NVIDIA GeForce RTX 5070 Ti
+                gpu_count: 1
+                gpu_nvidia:
+                    - architecture: Blackwell
+                      cudaCores: 8960
+                      memoryTotal: "17094934528"
+                      name: NVIDIA GeForce RTX 5070 Ti
+                      uuid: GPU-8ed3d629-4b03-2564-daf8-63b7610dc8e2
+                host: Lucas-PC
+                memory:
+                    total: "33407385600"
+                os: Windows-10-10.0.26200-SP0
+                program: c:\Users\lucas\Documents\MSE\4_Semester\deep-learning-mpw\01_MPW-CNN\notebooks\CNN-Tuning.ipynb
+                python: CPython 3.11.9
+                root: c:\Users\lucas\Documents\MSE\4_Semester\deep-learning-mpw\01_MPW-CNN\notebooks
+                startedAt: "2026-04-06T12:43:05.425427Z"
+                writerId: g9733wcbxpef32gmcfv9n9x77uirb3pf
+        m: []
+        python_version: 3.11.9
+        t:
+            "1":
+                - 1
+                - 41
+            "2":
+                - 1
+                - 41
+            "3":
+                - 2
+                - 13
+                - 16
+                - 62
+            "4": 3.11.9
+            "5": 0.25.0
+            "8":
+                - 1
+                - 3
+            "10":
+                - 20
+            "12": 0.25.0
+            "13": windows-amd64
+batch_size:
+    value: 64
+depth:
+    value: 12
+device:
+    value: cuda
+epochs:
+    value: 50
+lr:
+    value: 0.01
+momentum:
+    value: 0.4
+num_parameters:
+    value: 3537130
+optimizer:
+    value: Momentum_SGD
+weight_decay:
+    value: 0.0001

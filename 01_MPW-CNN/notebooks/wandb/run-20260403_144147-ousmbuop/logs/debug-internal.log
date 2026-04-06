@@ -1,0 +1,12 @@
+{"time":"2026-04-03T14:41:47.5475975+02:00","level":"INFO","msg":"stream: starting","core version":"0.25.0"}
+{"time":"2026-04-03T14:41:47.8444963+02:00","level":"INFO","msg":"stream: created new stream","id":"ousmbuop"}
+{"time":"2026-04-03T14:41:47.8444963+02:00","level":"INFO","msg":"handler: started","stream_id":"ousmbuop"}
+{"time":"2026-04-03T14:41:47.8449969+02:00","level":"INFO","msg":"stream: started","id":"ousmbuop"}
+{"time":"2026-04-03T14:41:47.8449969+02:00","level":"INFO","msg":"writer: started","stream_id":"ousmbuop"}
+{"time":"2026-04-03T14:41:47.8449969+02:00","level":"INFO","msg":"sender: started","stream_id":"ousmbuop"}
+{"time":"2026-04-03T15:07:48.558847+02:00","level":"INFO","msg":"fileTransfer: Close: file transfer manager closed"}
+{"time":"2026-04-03T15:07:48.8681142+02:00","level":"INFO","msg":"handler: operation stats","stats":{}}
+{"time":"2026-04-03T15:07:48.8736158+02:00","level":"INFO","msg":"stream: closing","id":"ousmbuop"}
+{"time":"2026-04-03T15:07:48.8736158+02:00","level":"INFO","msg":"handler: closed","stream_id":"ousmbuop"}
+{"time":"2026-04-03T15:07:48.8741156+02:00","level":"INFO","msg":"sender: closed","stream_id":"ousmbuop"}
+{"time":"2026-04-03T15:07:48.8741156+02:00","level":"INFO","msg":"stream: closed","id":"ousmbuop"}
