@@ -3,7 +3,7 @@ import torch
 
 from src.cnn.cnn_registry import register_model
 
-# creat a simple model with one convolutional layer and two fully connected layers
+# create a simple model with one convolutional layer and two fully connected layers
 @register_model("first_model")
 class first_model(nn.Module):
     

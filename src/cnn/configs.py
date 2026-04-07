@@ -102,6 +102,11 @@ class WandBConfig:
     watch_log: str = "all"
     watch_log_freq: int = 100
 
+    log_confusion_matrix: bool = True
+    confusion_matrix_split: str = "val"   # "val" or "test"
+    confusion_matrix_title: str | None = None
+    confusion_matrix_split_table: bool = False
+
 @dataclass
 class DatasetConfig:
     dataset_dir: Path = DATASET_DIR

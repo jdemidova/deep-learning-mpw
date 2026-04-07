@@ -1,9 +1,0 @@
-{"time":"2026-04-01T18:25:26.7055352+02:00","level":"INFO","msg":"using version","core version":"0.18.7"}
-{"time":"2026-04-01T18:25:26.7055352+02:00","level":"INFO","msg":"created symlink","path":"c:\\Users\\lucas\\Documents\\MSE\\4_Semester\\deep-learning-mpw\\01_MPW-CNN\\notebooks\\wandb\\run-20260401_182526-mutb67k6\\logs\\debug-core.log"}
-{"time":"2026-04-01T18:25:26.9971692+02:00","level":"INFO","msg":"created new stream","id":"mutb67k6"}
-{"time":"2026-04-01T18:25:26.9971692+02:00","level":"INFO","msg":"stream: started","id":"mutb67k6"}
-{"time":"2026-04-01T18:25:26.9971692+02:00","level":"INFO","msg":"handler: started","stream_id":"mutb67k6"}
-{"time":"2026-04-01T18:25:26.9971692+02:00","level":"INFO","msg":"sender: started","stream_id":"mutb67k6"}
-{"time":"2026-04-01T18:25:26.9971692+02:00","level":"INFO","msg":"writer: Do: started","stream_id":"mutb67k6"}
-{"time":"2026-04-01T18:25:27.6867127+02:00","level":"INFO","msg":"Starting system monitor"}
-{"time":"2026-04-01T18:25:31.1961511+02:00","level":"INFO","msg":"Pausing system monitor"}

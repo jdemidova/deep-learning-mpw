@@ -1,5 +1,0 @@
-2026-04-01 20:52:19,803 INFO    MainThread:36220 [wandb_init.py:setup_run_log_directory():717] Logging user logs to c:\Users\lucas\Documents\MSE\4_Semester\deep-learning-mpw\01_MPW-CNN\notebooks\wandb\run-20260401_205219-g1zmmbty\logs\debug.log
-2026-04-01 20:52:19,803 INFO    MainThread:36220 [wandb_init.py:setup_run_log_directory():718] Logging internal logs to c:\Users\lucas\Documents\MSE\4_Semester\deep-learning-mpw\01_MPW-CNN\notebooks\wandb\run-20260401_205219-g1zmmbty\logs\debug-internal.log
-2026-04-01 20:52:19,803 INFO    MainThread:36220 [wandb_init.py:init():844] calling init triggers
-2026-04-01 20:52:19,803 INFO    MainThread:36220 [wandb_init.py:init():849] wandb.init called with sweep_config: {}
-config: {'epochs': 50, 'batch_size': 64, 'optimizer': 'SGD', 'loss': 'CrossEntropyLoss', 'device': 'cuda', 'model': 'first_model', '_wandb': {}}

@@ -1,20 +1,15 @@
 from __future__ import annotations
 
 import copy
+from datetime import datetime
 import time
 import random
 
-from matplotlib import pyplot as plt
+import matplotlib.pyplot as plt
+from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
 
-import src.cnn.cnn_paths as paths
-
-import torch
 import wandb
 
-from src.cnn.cnn_registry import build_model
-from src.cnn.configs import *
-
-from pathlib import Path
 from collections import Counter
 
 import torch
@@ -22,6 +17,9 @@ import torch.nn as nn
 from torchvision import datasets, transforms
 
 from src.cnn.configs import DatasetConfig
+from src.cnn.cnn_registry import build_model
+from src.cnn.configs import *
+import src.cnn.cnn_paths as paths
 
 
 def _build_default_transform(
@@ -219,13 +217,17 @@ def set_seed(seed: Optional[int]) -> None:
         torch.cuda.manual_seed_all(seed)
 
 
+def _effective_pin_memory(cfg: ExperimentConfig) -> bool:
+    device_type = torch.device(cfg.train.device).type
+    return bool(cfg.loader.pin_memory and device_type == "cuda")
+
 def make_train_loader(dataset, cfg: ExperimentConfig) -> DataLoader:
     return DataLoader(
         dataset,
         batch_size=cfg.loader.batch_size,
         shuffle=cfg.loader.train_shuffle,
         num_workers=cfg.loader.num_workers,
-        pin_memory=cfg.loader.pin_memory,
+        pin_memory=_effective_pin_memory(cfg),
         drop_last=cfg.loader.drop_last_train,
     )
 
@@ -236,11 +238,22 @@ def make_eval_loader(dataset, cfg: ExperimentConfig) -> DataLoader:
         batch_size=cfg.loader.batch_size,
         shuffle=cfg.loader.eval_shuffle,
         num_workers=cfg.loader.num_workers,
-        pin_memory=cfg.loader.pin_memory,
+        pin_memory=_effective_pin_memory(cfg),
         drop_last=cfg.loader.drop_last_eval,
     )
 
+def configure_runtime_defaults(cfg: ExperimentConfig) -> ExperimentConfig:
+    device = torch.device(cfg.train.device)
 
+    # pin_memory is only meaningful here for CUDA in this codebase
+    if device.type != "cuda":
+        cfg.loader.pin_memory = False
+
+    # AMP is only enabled here for CUDA
+    if device.type != "cuda":
+        cfg.train.use_amp = False
+
+    return cfg
 
 def build_loss(cfg: ExperimentConfig, device: torch.device) -> nn.Module:
     return cfg.loss.cls(**cfg.loss.kwargs).to(device)
@@ -421,7 +434,7 @@ def train_one_epoch(
 ) -> dict[str, float]:
     device = torch.device(cfg.train.device)
     use_amp = cfg.train.use_amp and device.type == "cuda"
-    scaler = torch.cuda.amp.GradScaler(enabled=use_amp)
+    scaler = torch.amp.GradScaler("cuda", enabled=use_amp)
 
     model.train()
 
@@ -437,7 +450,7 @@ def train_one_epoch(
 
         optimizer.zero_grad(set_to_none=True)
 
-        with torch.autocast(device_type=device.type, enabled=use_amp):
+        with torch.amp.autocast("cuda", enabled=use_amp):
             logits = model(x)
             loss = criterion(logits, y)
 
@@ -646,12 +659,15 @@ def train_eval(
 
     run = init_wandb_run(cfg, model=model)
 
+    run_id = run.id if run is not None else None
+
     trained_model, history, train_result = train(
         model=model,
         train_loader=train_loader,
         val_loader=val_loader,
         cfg=cfg,
     )
+    trained_model = trained_model.to(torch.device(cfg.train.device))
 
     device = torch.device(cfg.train.device)
     criterion = build_loss(cfg, device)
@@ -670,10 +686,17 @@ def train_eval(
         **final_metrics,
     }
 
+    result["wandb_run_id"] = run_id
+    result["timestamp"] = datetime.now().strftime("%Y%m%d_%H%M%S")
+
     # optional final one-shot log
     if cfg.wandb.enabled and cfg.wandb.mode != "disabled":
         log_metrics_to_wandb(final_metrics, cfg)
         write_summary_to_wandb(result, cfg)
+
+    if torch.backends.mps.is_available() and str(cfg.train.device).startswith("mps"):
+        torch.mps.synchronize()
+        torch.mps.empty_cache()
 
     if run is not None:
         wandb.finish()
@@ -785,26 +808,111 @@ def load_model_for_inference(path, filename, map_location="cpu"):
     model.eval()
     return model, checkpoint
 
-# ============================================================================
-# Model constructor
-# ============================================================================
+@torch.no_grad()
+def predict_loader(model, loader, cfg, return_probs: bool = False):
+    device = torch.device(cfg.train.device)
 
-# builder function
-def builder(model_name: str, depth: int = 12, num_classes: int = 10, in_channels: int = 3):
-    """
-    Returns a hardcoded CNN configuration by name.
-    """
+    model = model.to(device)
 
-    model_name = model_name.lower()
+    model.eval()
 
-    if model_name == "cnn_small":
-        return DepthCNN(
-            depth=depth,
-            in_channels=in_channels,
-            num_classes=num_classes,
-            base_channels=32,
-            max_channels=256,
-            dropout_conv=0.0,
-            dropout_fc=0.5,
-            inputsize=224,
+    y_true = []
+    y_pred = []
+    y_prob = []
+
+    for x, y in loader:
+        x = x.to(device, non_blocking=cfg.train.non_blocking)
+        y = y.to(device, non_blocking=cfg.train.non_blocking)
+
+        logits = model(x)
+        probs = torch.softmax(logits, dim=1)
+        preds = probs.argmax(dim=1)
+
+        y_true.extend(y.cpu().tolist())
+        y_pred.extend(preds.cpu().tolist())
+
+        if return_probs:
+            y_prob.extend(probs.cpu().tolist())
+
+    if return_probs:
+        return y_true, y_pred, y_prob
+    return y_true, y_pred
+
+
+def log_confusion_matrix(
+    y_true,
+    y_pred=None,
+    y_prob=None,
+    class_names=None,
+    key: str = "val/confusion_matrix",
+    title: str = "Validation Confusion Matrix",
+    split_table: bool = False,
+):
+    if y_pred is None and y_prob is None:
+        raise ValueError("Provide either y_pred or y_prob.")
+    if y_pred is not None and y_prob is not None:
+        raise ValueError("Provide only one of y_pred or y_prob.")
+
+    y_true = [int(v) for v in y_true]
+
+    if y_pred is not None:
+        y_pred = [int(v) for v in y_pred]
+
+    if class_names is not None:
+        n_classes = len(class_names)
+
+        bad_true = sorted(set(v for v in y_true if v < 0 or v >= n_classes))
+        if bad_true:
+            raise ValueError(
+                f"y_true contains labels outside [0, {n_classes - 1}]: {bad_true}"
+            )
+
+        if y_pred is not None:
+            bad_pred = sorted(set(v for v in y_pred if v < 0 or v >= n_classes))
+            if bad_pred:
+                raise ValueError(
+                    f"y_pred contains labels outside [0, {n_classes - 1}]: {bad_pred}"
+                )
+
+        if y_prob is not None:
+            prob_widths = sorted(set(len(row) for row in y_prob))
+            if prob_widths != [n_classes]:
+                raise ValueError(
+                    f"y_prob width does not match class_names length: "
+                    f"{prob_widths} vs {n_classes}"
+                )
+
+    if y_prob is not None:
+        chart = wandb.plot.confusion_matrix(
+            probs=y_prob,
+            y_true=y_true,
+            class_names=class_names,
+            title=title,
+            split_table=split_table,
         )
+    else:
+        chart = wandb.plot.confusion_matrix(
+            preds=y_pred,
+            y_true=y_true,
+            class_names=class_names,
+            title=title,
+            split_table=split_table,
+        )
+
+    wandb.log({key: chart})
+
+
+def make_confusion_matrix_fig(y_true, y_pred, class_names, normalize=None, title="Confusion Matrix"):
+    cm = confusion_matrix(
+        y_true,
+        y_pred,
+        labels=list(range(len(class_names))),
+        normalize=normalize,
+    )
+    fig, ax = plt.subplots(figsize=(8, 8))
+    disp = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=class_names)
+    disp.plot(ax=ax, xticks_rotation=45, colorbar=False, cmap="Blues")
+    ax.set_title(title)
+    fig.tight_layout()
+    return fig
+

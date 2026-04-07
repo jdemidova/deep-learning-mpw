@@ -1,6 +1,0 @@
-2026-03-23 22:05:05,463 INFO    MainThread:22808 [wandb_init.py:setup_run_log_directory():717] Logging user logs to c:\Users\lucas\Documents\MSE\4_Semester\deep-learning-mpw\01_MPW-CNN\notebooks\wandb\run-20260323_220505-e1p0l2wv\logs\debug.log
-2026-03-23 22:05:05,463 INFO    MainThread:22808 [wandb_init.py:setup_run_log_directory():718] Logging internal logs to c:\Users\lucas\Documents\MSE\4_Semester\deep-learning-mpw\01_MPW-CNN\notebooks\wandb\run-20260323_220505-e1p0l2wv\logs\debug-internal.log
-2026-03-23 22:05:05,463 INFO    MainThread:22808 [wandb_init.py:init():844] calling init triggers
-2026-03-23 22:05:05,463 INFO    MainThread:22808 [wandb_init.py:init():849] wandb.init called with sweep_config: {}
-config: {'learning_rate': 0.02, 'architecture': 'CNN', 'dataset': 'CIFAR-100', 'epochs': 10, '_wandb': {}}
-2026-03-23 22:05:05,464 INFO    MainThread:22808 [wandb_init.py:init():892] starting backend
