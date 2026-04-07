@@ -198,3 +198,136 @@ class DepthCNN(nn.Module):
         return x
     
 
+@register_model("depth_cnn_fc")
+class DepthCNNFC(nn.Module):
+    """
+    DepthCNN with configurable number of convolutional layers and
+    fully connected layers in the classifier head.
+
+    fc_layers:
+    1 -> features -> num_classes
+    2 -> features -> hidden1 -> num_classes
+    3 -> features -> hidden1 -> hidden2 -> num_classes
+    4 -> features -> hidden1 -> hidden2 -> hidden3 -> num_classes
+    5 -> features -> hidden1 -> hidden2 -> hidden3 -> hidden4 -> num_classes
+    """
+
+
+    def __init__(
+        self,
+        depth: int,
+        in_channels: int = 3,
+        num_classes: int = 10,
+        base_channels: int = 32,
+        max_channels: int = 256,
+        dropout_conv: float = 0.0,
+        dropout_fc: float = 0.5,
+        inputsize: int = 224,
+        fc_layers: int = 1,
+        hidden1: int = 128,
+        hidden2: int = 64,
+        hidden3: int = 32,
+        hidden4: int = 16,
+    ):
+        super().__init__()
+
+        if depth < 1:
+            raise ValueError("depth must be >= 1")
+        if fc_layers < 1 or fc_layers > 5:
+            raise ValueError("fc_layers must be 1, 2, 3, 4, or 5")
+
+        layers = []
+        current_in = in_channels
+        current_out = base_channels
+        current_size = inputsize
+        pool_count = 0
+
+        for i in range(depth):
+            want_pool = ((i + 1) % 2 == 0)
+            use_pool = want_pool and current_size >= 2 and pool_count < 4
+
+            layers.append(
+                ConvBlock(
+                    in_channels=current_in,
+                    out_channels=current_out,
+                    use_pool=use_pool,
+                    dropout=dropout_conv if depth >= 4 else 0.0,
+                )
+            )
+
+            current_in = current_out
+
+            if use_pool:
+                pool_count += 1
+                current_size = current_size // 2
+                current_out = min(current_out * 2, max_channels)
+
+        self.features = nn.Sequential(*layers)
+
+        classifier_layers = [
+            nn.AdaptiveAvgPool2d((1, 1)),
+            nn.Flatten(),
+        ]
+
+        # hard coded fully connected layers based on the fc_layers parameter, with ReLU activations and dropout in between for regularization, allowing for more complex classifier heads if desired
+        if fc_layers == 1:
+            classifier_layers.extend([
+                nn.Dropout(p=dropout_fc),
+                nn.Linear(current_in, num_classes),
+            ])
+
+        elif fc_layers == 2:
+            classifier_layers.extend([
+                nn.Linear(current_in, hidden1),
+                nn.ReLU(inplace=True),
+                nn.Dropout(p=dropout_fc),
+                nn.Linear(hidden1, num_classes),
+            ])
+
+        elif fc_layers == 3:
+            classifier_layers.extend([
+                nn.Linear(current_in, hidden1),
+                nn.ReLU(inplace=True),
+                nn.Dropout(p=dropout_fc),
+                nn.Linear(hidden1, hidden2),
+                nn.ReLU(inplace=True),
+                nn.Dropout(p=dropout_fc),
+                nn.Linear(hidden2, num_classes),
+            ])
+
+        elif fc_layers == 4:
+            classifier_layers.extend([
+                nn.Linear(current_in, hidden1),
+                nn.ReLU(inplace=True),
+                nn.Dropout(p=dropout_fc),
+                nn.Linear(hidden1, hidden2),
+                nn.ReLU(inplace=True),
+                nn.Dropout(p=dropout_fc),
+                nn.Linear(hidden2, hidden3),
+                nn.ReLU(inplace=True),
+                nn.Dropout(p=dropout_fc),
+                nn.Linear(hidden3, num_classes),
+            ])
+
+        elif fc_layers == 5:
+            classifier_layers.extend([
+                nn.Linear(current_in, hidden1),
+                nn.ReLU(inplace=True),
+                nn.Dropout(p=dropout_fc),
+                nn.Linear(hidden1, hidden2),
+                nn.ReLU(inplace=True),
+                nn.Dropout(p=dropout_fc),
+                nn.Linear(hidden2, hidden3),
+                nn.ReLU(inplace=True),
+                nn.Dropout(p=dropout_fc),
+                nn.Linear(hidden3, hidden4),
+                nn.ReLU(inplace=True),
+                nn.Dropout(p=dropout_fc),
+                nn.Linear(hidden4, num_classes),
+            ])
+        self.classifier = nn.Sequential(*classifier_layers)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        x = self.features(x)
+        x = self.classifier(x)
+        return x
