@@ -4,6 +4,7 @@
 *.pth
 notebooks/cnn/wandb_logs/
 notebooks/cnn/wandb/
+notebooks/wandb/
 01_MPW-CNN/notebooks/wandb/
 01_MPW-CNN/notebooks/wandb_logs/
 01_MPW-CNN/data/checkpoints
