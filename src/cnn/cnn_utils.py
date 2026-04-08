@@ -431,10 +431,10 @@ def train_one_epoch(
     optimizer: torch.optim.Optimizer,
     criterion: nn.Module,
     cfg: ExperimentConfig,
+    scaler: torch.amp.GradScaler | None = None,
 ) -> dict[str, float]:
     device = torch.device(cfg.train.device)
     use_amp = cfg.train.use_amp and device.type == "cuda"
-    scaler = torch.amp.GradScaler("cuda", enabled=use_amp)
 
     model.train()
 
@@ -444,9 +444,9 @@ def train_one_epoch(
 
     start_time = time.perf_counter()
 
-    for x, y in loader:
-        x = x.to(device, non_blocking=cfg.train.non_blocking)
-        y = y.to(device, non_blocking=cfg.train.non_blocking)
+    for x_cpu, y_cpu in loader:
+        x = x_cpu.to(device, non_blocking=cfg.train.non_blocking)
+        y = y_cpu.to(device, non_blocking=cfg.train.non_blocking).long()
 
         optimizer.zero_grad(set_to_none=True)
 
@@ -455,6 +455,7 @@ def train_one_epoch(
             loss = criterion(logits, y)
 
         if use_amp:
+            assert scaler is not None
             scaler.scale(loss).backward()
 
             if cfg.train.grad_clip_norm is not None:
@@ -471,10 +472,14 @@ def train_one_epoch(
 
             optimizer.step()
 
-        batch_size = y.size(0)
+        batch_size = y_cpu.size(0)
         running_loss += loss.item() * batch_size
-        running_correct += (logits.argmax(dim=1) == y).sum().item()
+
+        preds_cpu = logits.detach().argmax(dim=1).cpu()
+        y_cpu = y_cpu.long().cpu()
+        running_correct += (preds_cpu == y_cpu).sum().item()
         running_total += batch_size
+
 
     epoch_loss = running_loss / running_total
     epoch_acc = running_correct / running_total
@@ -488,14 +493,14 @@ def train_one_epoch(
 
 
 @torch.no_grad()
-def evaluate(
+def evaluate_model_on_loader(
     model: nn.Module,
     loader: DataLoader,
-    criterion: nn.Module,
     cfg: ExperimentConfig,
     prefix: str = "val",
 ) -> dict[str, float]:
     device = torch.device(cfg.train.device)
+    criterion_cpu = build_loss(cfg, torch.device("cpu"))
 
     model.eval()
 
@@ -503,39 +508,33 @@ def evaluate(
     running_correct = 0
     running_total = 0
 
-    for x, y in loader:
-        x = x.to(device, non_blocking=cfg.train.non_blocking)
-        y = y.to(device, non_blocking=cfg.train.non_blocking)
+    for x_cpu, y_cpu in loader:
+        x = x_cpu.to(device, non_blocking=cfg.train.non_blocking)
+        y = y_cpu.to(device, non_blocking=cfg.train.non_blocking).long()
 
         logits = model(x)
-        loss = criterion(logits, y)
 
-        batch_size = y.size(0)
-        running_loss += loss.item() * batch_size
-        running_correct += (logits.argmax(dim=1) == y).sum().item()
+        logits_cpu = logits.detach().float().cpu()
+        y_cpu = y_cpu.long().cpu()
+
+        loss_cpu = criterion_cpu(logits_cpu, y_cpu)
+
+        batch_size = y_cpu.size(0)
+        running_loss += loss_cpu.item() * batch_size
+        running_correct += (logits_cpu.argmax(dim=1) == y_cpu).sum().item()
         running_total += batch_size
 
-    epoch_loss = running_loss / running_total
-    epoch_acc = running_correct / running_total
-
     return {
-        f"{prefix}/loss": epoch_loss,
-        f"{prefix}/accuracy": epoch_acc,
+        f"{prefix}/loss": running_loss / running_total,
+        f"{prefix}/accuracy": running_correct / running_total,
     }
 
-
-def train(
+def train_model(
     model: nn.Module,
     train_loader: DataLoader,
     cfg: ExperimentConfig,
     val_loader: Optional[DataLoader] = None,
 ) -> tuple[nn.Module, dict[str, list[float]], dict[str, Any]]:
-    """
-    Training loop only.
-    - builds loss / optimizer / scheduler from config
-    - tracks best model according to cfg.train.best_metric
-    - logs epoch metrics to W&B if enabled
-    """
     set_seed(cfg.train.seed)
 
     device = torch.device(cfg.train.device)
@@ -544,6 +543,9 @@ def train(
     criterion = build_loss(cfg, device)
     optimizer = build_optimizer(model, cfg)
     scheduler = build_scheduler(optimizer, cfg)
+
+    use_amp = cfg.train.use_amp and device.type == "cuda"
+    scaler = torch.amp.GradScaler("cuda", enabled=use_amp)
 
     history: dict[str, list[float]] = {}
 
@@ -558,26 +560,23 @@ def train(
             optimizer=optimizer,
             criterion=criterion,
             cfg=cfg,
+            scaler=scaler,
         )
 
         epoch_metrics: dict[str, float] = {"epoch": float(epoch)}
         epoch_metrics.update(train_metrics)
 
         if val_loader is not None:
-            val_metrics = evaluate(
+            val_metrics = evaluate_model_on_loader(
                 model=model,
                 loader=val_loader,
-                criterion=criterion,
                 cfg=cfg,
                 prefix="val",
             )
             epoch_metrics.update(val_metrics)
-
-            # useful overfitting diagnostics
             epoch_metrics["gap/accuracy"] = epoch_metrics["train/accuracy"] - epoch_metrics["val/accuracy"]
             epoch_metrics["gap/loss"] = epoch_metrics["val/loss"] - epoch_metrics["train/loss"]
 
-        # scheduler stepping
         if scheduler is not None:
             if cfg.scheduler.step_metric is None:
                 scheduler.step()
@@ -589,10 +588,8 @@ def train(
                     )
                 scheduler.step(epoch_metrics[cfg.scheduler.step_metric])
 
-        # lr logging
         epoch_metrics["lr"] = optimizer.param_groups[0]["lr"]
 
-        # best checkpoint selection
         if cfg.train.best_metric not in epoch_metrics:
             raise KeyError(
                 f"Best metric '{cfg.train.best_metric}' not found in epoch metrics: "
@@ -600,6 +597,13 @@ def train(
             )
 
         current_value = epoch_metrics[cfg.train.best_metric]
+        print(
+            "epoch", epoch,
+            "train_acc", epoch_metrics["train/accuracy"],
+            "val_acc", epoch_metrics.get("val/accuracy"),
+            "best_before", best_value,
+            "current", current_value,
+        )
         if _is_better(current_value, best_value, cfg.train.best_mode):
             best_value = current_value
             best_epoch = epoch
@@ -607,13 +611,13 @@ def train(
 
             epoch_metrics["best/epoch_so_far"] = float(best_epoch)
             epoch_metrics[f"best/{cfg.train.best_metric}_so_far"] = float(best_value)
+            print(">>> updating best_state at epoch", epoch, "to", current_value)
 
         _append_to_history(history, epoch_metrics)
 
         if cfg.wandb.log_epoch_metrics and (epoch % cfg.wandb.log_every_n_epochs == 0):
             log_metrics_to_wandb(epoch_metrics, cfg)
 
-        # console output
         msg = (
             f"Epoch [{epoch:03d}/{cfg.train.epochs:03d}] "
             f"| train_loss={epoch_metrics['train/loss']:.4f} "
@@ -627,7 +631,6 @@ def train(
         msg += f"| time={epoch_metrics['train/time_sec']:.1f}s"
         print(msg)
 
-    # restore best weights
     model.load_state_dict(best_state)
 
     result = {
@@ -639,7 +642,7 @@ def train(
     return model, history, result
 
 
-def train_eval(
+def train_and_evaluate_model(
     model: nn.Module,
     train_loader: DataLoader,
     cfg: ExperimentConfig,
@@ -661,7 +664,7 @@ def train_eval(
 
     run_id = run.id if run is not None else None
 
-    trained_model, history, train_result = train(
+    trained_model, history, train_result = train_model(
         model=model,
         train_loader=train_loader,
         val_loader=val_loader,
@@ -673,13 +676,13 @@ def train_eval(
     criterion = build_loss(cfg, device)
 
     final_metrics: dict[str, float] = {}
-    final_metrics.update(evaluate(trained_model, train_loader, criterion, cfg, prefix="train_final"))
+    final_metrics.update(evaluate_model_on_loader(trained_model, train_loader, cfg, prefix="train_final"))
 
     if val_loader is not None:
-        final_metrics.update(evaluate(trained_model, val_loader, criterion, cfg, prefix="val_final"))
+        final_metrics.update(evaluate_model_on_loader(trained_model, val_loader, cfg, prefix="val_final"))
 
     if test_loader is not None:
-        final_metrics.update(evaluate(trained_model, test_loader, criterion, cfg, prefix="test"))
+        final_metrics.update(evaluate_model_on_loader(trained_model, test_loader, cfg, prefix="test"))
 
     result = {
         **train_result,
@@ -758,7 +761,7 @@ def run_experiment(cfg: ExperimentConfig):
     print(model)
     print(f"Trainable parameters: {get_num_parameters(model):,}")
 
-    model, history, result = train_eval(
+    model, history, result = train_and_evaluate_model(
         model=model,
         train_loader=train_loader,
         val_loader=val_loader,
@@ -916,3 +919,34 @@ def make_confusion_matrix_fig(y_true, y_pred, class_names, normalize=None, title
     fig.tight_layout()
     return fig
 
+def _unwrap_model(model: nn.Module) -> nn.Module:
+    return model.module if hasattr(model, "module") else model
+
+
+def _find_last_linear(model: nn.Module) -> tuple[str, nn.Linear]:
+    base = _unwrap_model(model)
+
+    last_name = None
+    last_layer = None
+    for name, layer in base.named_modules():
+        if isinstance(layer, nn.Linear):
+            last_name = name
+            last_layer = layer
+
+    if last_layer is None:
+        raise ValueError("No nn.Linear layer found in model.")
+
+    return last_name, last_layer
+
+def manual_acc_debug(model, loader, device):
+    model.eval()
+    correct = 0
+    total = 0
+    with torch.no_grad():
+        for x, y in loader:
+            x = x.to(device)
+            logits = model(x)
+            preds = logits.argmax(dim=1).cpu()
+            correct += (preds == y.cpu()).sum().item()
+            total += y.size(0)
+    return correct, total, correct / total
