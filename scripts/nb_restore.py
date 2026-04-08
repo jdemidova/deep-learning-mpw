@@ -2,17 +2,19 @@
 # The problem appears after change pulls.
 # The problem is that NB is written into single NB cell in a JSON format.
 
-# RUN:
-# $ uv run python scripts/nb_restore.py notebooks/cnn/CNN-Grad-CAM.ipynb --clear-outputs
-# It Creates:
-# ..._restored.ipynb
-
 # USE:
-# backup broken notebook : $ cp notebooks/cnn/CNN-Grad-CAM.ipynb notebooks/cnn/CNN-Grad-CAM.backup.ipynb
+# backup broken notebook : $ cp notebooks/cnn/CNN_API_demo.ipynb notebooks/cnn/CNN_API_demo.backup.ipynb
 # RUN recovery script
 # open restored notebook in IDE
 # if it looks correct, replace the broken one
 # commit
+
+# RUN:
+# $ uv run python scripts/nb_restore.py notebooks/cnn/CNN_API_demo.ipynb --clear-outputs
+# It Creates:
+# ..._restored.ipynb
+
+
 
 from __future__ import annotations
 
