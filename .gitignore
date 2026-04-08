@@ -6,6 +6,12 @@ notebooks/cnn/wandb_logs/
 notebooks/cnn/wandb/
 01_MPW-CNN/notebooks/wandb/
 01_MPW-CNN/notebooks/wandb_logs/
+01_MPW-CNN/data/checkpoints
+01_MPW-CNN/data/icosimal_img_class_03/
+01_MPW-CNN/notebooks/
+data/icosimal_img_class_03/
+artifacts/
+outputs/
 
 
 # Python
@@ -32,8 +38,4 @@ env/
 .idea/
 .vscode/
 
-# Local data and outputs
-data/icosimal_img_class_03/
-artifacts/
-outputs/
 

@@ -68,30 +68,38 @@ class improved_model(nn.Module):
 
 @register_model("shallow_model")
 class ShallowModel(nn.Module):
+    def __init__(
+        self,
+        units: int = 128,
+        drop: float = 0.5,
+        in_channels: int = 3,
+        num_classes: int = 10,
+    ):
+        super().__init__()
 
-    def __init__(self, units=128, drop=0.5):
-        super(ShallowModel, self).__init__()
-        self.seq = nn.Sequential(
-            # Layer 1---------------------------------------------------------------------------------------
-            nn.Conv2d(3, 32, kernel_size=3, padding=1),  # Conv with 32 filters, kernel size 3x3, padding 1
+        self.features = nn.Sequential(
+            nn.Conv2d(in_channels, 32, kernel_size=3, padding=1),
             nn.ReLU(),
-            nn.MaxPool2d(kernel_size=2, stride=2),  # 224x224 -> 112x112
+            nn.MaxPool2d(kernel_size=2, stride=2),
 
-            # Layer 2---------------------------------------------------------------------------------------
-            nn.Conv2d(32, 64, kernel_size=3, padding=1),  # Conv with 64 filters, kernel size 3x3, padding 1
+            nn.Conv2d(32, 64, kernel_size=3, padding=1),
             nn.ReLU(),
-            nn.MaxPool2d(kernel_size=2, stride=2),  # 112x112 -> 56x56
-
-            # output layer----------------------------------------------------------------------------------
-            nn.Flatten(),
-            nn.Linear(56 * 56 * 64, units),
-            nn.ReLU(),
-            nn.Dropout(drop),  # dropout rate of 0.5 as default value
-            nn.Linear(units, 10)  # output layer with 10 units for 10 classes
+            nn.MaxPool2d(kernel_size=2, stride=2),
         )
 
-    def forward(self, x):
-        return self.seq(x)
+        self.classifier = nn.Sequential(
+            nn.AdaptiveAvgPool2d((1, 1)),
+            nn.Flatten(),
+            nn.Linear(64, units),
+            nn.ReLU(),
+            nn.Dropout(drop),
+            nn.Linear(units, num_classes),
+        )
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        x = self.features(x)
+        x = self.classifier(x)
+        return x
 
 # =========================================================
 # Building blocks
