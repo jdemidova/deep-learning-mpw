@@ -1,16 +1,19 @@
 from __future__ import annotations
-
+import math
 import copy
 from datetime import datetime
 import time
 import random
 
 import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
 from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
 
 import wandb
 
 from collections import Counter
+from collections.abc import Callable, Sequence
 
 import torch
 import torch.nn as nn
@@ -950,3 +953,559 @@ def manual_acc_debug(model, loader, device):
             correct += (preds == y.cpu()).sum().item()
             total += y.size(0)
     return correct, total, correct / total
+
+def _unpack_sample(sample: Any) -> tuple[torch.Tensor, int]:
+    """
+    Supports:
+      - (image, label)
+      - (image, label, ...)
+      - {"image": ..., "label": ...}
+    """
+    if isinstance(sample, dict):
+        return sample["image"], int(sample["label"])
+
+    if isinstance(sample, (tuple, list)) and len(sample) >= 2:
+        return sample[0], int(sample[1])
+
+    raise TypeError(
+        "Unsupported dataset sample format. Expected tuple/list with (image, label) "
+        "or dict with keys 'image' and 'label'."
+    )
+
+
+def _default_id_getter(dataset, idx: int) -> str:
+    """
+    Best effort:
+    - if sample is a dict and contains common id/path keys, use them
+    - otherwise fallback to dataset index as string
+    """
+    sample = dataset[idx]
+
+    if isinstance(sample, dict):
+        for key in ("id", "image_id", "sample_id", "path", "filepath", "filename"):
+            if key in sample:
+                return str(sample[key])
+
+    return str(idx)
+
+
+def _identity_norm_params(num_channels: int) -> tuple[list[float], list[float]]:
+    return [0.0] * num_channels, [1.0] * num_channels
+
+
+def denorm_to_rgb(
+    image_tensor: torch.Tensor,
+    mean: Sequence[float] | None = None,
+    std: Sequence[float] | None = None,
+) -> np.ndarray:
+    """
+    image_tensor: CHW tensor
+    returns: HWC float image in [0, 1]
+    """
+    x = image_tensor.detach().cpu().float()
+
+    if x.ndim != 3:
+        raise ValueError(f"Expected CHW tensor, got shape={tuple(x.shape)}")
+
+    c = x.shape[0]
+    if mean is None or std is None:
+        mean, std = _identity_norm_params(c)
+
+    mean_t = torch.tensor(mean, dtype=x.dtype).view(-1, 1, 1)
+    std_t = torch.tensor(std, dtype=x.dtype).view(-1, 1, 1)
+
+    x = x * std_t + mean_t
+    x = x.clamp(0, 1)
+
+    if x.shape[0] == 1:
+        x = x.repeat(3, 1, 1)
+
+    return x.permute(1, 2, 0).numpy()
+
+
+@torch.no_grad()
+def collect_prediction_records(
+    model: nn.Module,
+    dataset,
+    cfg,
+    class_names: Sequence[str],
+    *,
+    batch_size: int = 64,
+    id_getter: Callable[[Any, int], str] | None = None,
+) -> pd.DataFrame:
+    """
+    Builds one row per sample with:
+    - dataset index / sample id
+    - true/pred labels
+    - predicted confidence
+    - true-class probability
+    - confidence gap
+    - entropy
+    - correctness
+    """
+    device = torch.device(cfg.train.device)
+    model.eval()
+
+    if id_getter is None:
+        id_getter = _default_id_getter
+
+    rows: list[dict[str, Any]] = []
+
+    for start in range(0, len(dataset), batch_size):
+        batch_indices = list(range(start, min(start + batch_size, len(dataset))))
+
+        xs = []
+        ys = []
+
+        for idx in batch_indices:
+            x, y = _unpack_sample(dataset[idx])
+            xs.append(x)
+            ys.append(y)
+
+        x_batch = torch.stack(xs).to(device, non_blocking=cfg.train.non_blocking)
+        y_batch = torch.tensor(ys, dtype=torch.long)
+
+        logits = model(x_batch)
+        probs = torch.softmax(logits, dim=1).detach().cpu()
+
+        pred_idx = probs.argmax(dim=1)
+        pred_conf = probs.max(dim=1).values
+        true_conf = probs[torch.arange(len(batch_indices)), y_batch]
+        entropy = -(probs * probs.clamp_min(1e-12).log()).sum(dim=1)
+
+        # margin between top-1 and top-2 probs
+        top2 = torch.topk(probs, k=2, dim=1).values
+        margin = top2[:, 0] - top2[:, 1]
+
+        for j, ds_idx in enumerate(batch_indices):
+            y_true = int(y_batch[j].item())
+            y_pred = int(pred_idx[j].item())
+
+            rows.append(
+                {
+                    "index": ds_idx,
+                    "sample_id": id_getter(dataset, ds_idx),
+                    "true_idx": y_true,
+                    "true_name": class_names[y_true],
+                    "pred_idx": y_pred,
+                    "pred_name": class_names[y_pred],
+                    "correct": y_true == y_pred,
+                    "pred_conf": float(pred_conf[j].item()),
+                    "true_conf": float(true_conf[j].item()),
+                    "conf_gap": float(pred_conf[j].item() - true_conf[j].item()),
+                    "wrongness_score": float(pred_conf[j].item() - true_conf[j].item()),
+                    "entropy": float(entropy[j].item()),
+                    "margin": float(margin[j].item()),
+
+                }
+            )
+
+    df = pd.DataFrame(rows)
+
+    df["correct"] = df["correct"].astype(bool)
+    return df
+
+def top_n_most_confident_mistakes(df: pd.DataFrame, n: int = 30) -> pd.DataFrame:
+    """Samples where the model was wrong and highly certain.
+    These are the most dangerous failures and often reveal shortcut features or systematic confusion."""
+    n = min(n, 30)
+    return (
+        df.loc[~df["correct"]]
+        .sort_values(["pred_conf", "entropy"], ascending=[False, True])
+        .head(n)
+        .reset_index(drop=True)
+    )
+
+
+def top_n_least_confident_correct(df: pd.DataFrame, n: int = 30) -> pd.DataFrame:
+    """Samples the model got right but only barely. These are fragile wins near the decision boundary."""
+    n = min(n, 30)
+    return (
+        df.loc[df["correct"]]
+        .sort_values(["pred_conf", "entropy"], ascending=[True, False])
+        .head(n)
+        .reset_index(drop=True)
+    )
+
+
+def top_n_most_uncertain_overall(
+    df: pd.DataFrame,
+    n: int = 30,
+    *,
+    by: str = "pred_conf",
+) -> pd.DataFrame:
+    """
+    Samples with the weakest class preference.
+    These often indicate ambiguous images, overlapping classes, or a messy decision boundary.
+
+    by='pred_conf'  -> lowest max probability first
+    by='entropy'    -> highest entropy first
+    by='margin'     -> smallest top1-top2 margin first
+    """
+    n = min(n, 30)
+
+    if by == "pred_conf":
+        return (
+            df.sort_values(["pred_conf", "entropy"], ascending=[True, False])
+            .head(n)
+            .reset_index(drop=True)
+        )
+    if by == "entropy":
+        return (
+            df.sort_values(["entropy", "pred_conf"], ascending=[False, True])
+            .head(n)
+            .reset_index(drop=True)
+        )
+    if by == "margin":
+        return (
+            df.sort_values(["margin", "entropy"], ascending=[True, False])
+            .head(n)
+            .reset_index(drop=True)
+        )
+
+    raise ValueError("by must be one of: 'pred_conf', 'entropy', 'margin'")
+
+
+def top_n_mistakes_per_true_class(
+    df: pd.DataFrame,
+    n: int = 30,
+) -> dict[str, pd.DataFrame]:
+    """The hardest failures for each true class. This avoids hiding class-specific errors behind aggregate metrics."""
+    n = min(n, 30)
+    out: dict[str, pd.DataFrame] = {}
+
+    mistakes = df.loc[~df["correct"]].copy()
+
+    for class_name, group in mistakes.groupby("true_name", sort=True):
+        out[class_name] = (
+            group.sort_values(["pred_conf", "entropy"], ascending=[False, True])
+            .head(n)
+            .reset_index(drop=True)
+        )
+
+    return out
+
+def summarize_cases(df: pd.DataFrame) -> pd.DataFrame:
+    cols = [
+        "sample_id",
+        "index",
+        "true_name",
+        "pred_name",
+        "correct",
+        "pred_conf",
+        "true_conf",
+        "entropy",
+        "margin",
+    ]
+    out = df[cols].copy()
+    out["pred_conf"] = out["pred_conf"].round(4)
+    out["true_conf"] = out["true_conf"].round(4)
+    out["entropy"] = out["entropy"].round(4)
+    out["margin"] = out["margin"].round(4)
+    return out
+
+def plot_case_grid(
+    dataset,
+    cases_df: pd.DataFrame,
+    *,
+    mean: Sequence[float] | None = None,
+    std: Sequence[float] | None = None,
+    title: str | None = None,
+    max_n: int = 30,
+    ncols: int = 5,
+    figsize_per_cell: tuple[float, float] = (3.4, 3.4),
+) -> None:
+    cases_df = cases_df.head(min(max_n, 30)).reset_index(drop=True)
+
+    n = len(cases_df)
+    if n == 0:
+        print("No cases to plot.")
+        return
+
+    ncols = min(ncols, n)
+    nrows = math.ceil(n / ncols)
+
+    fig_w = figsize_per_cell[0] * ncols
+    fig_h = figsize_per_cell[1] * nrows
+
+    fig, axes = plt.subplots(nrows, ncols, figsize=(fig_w, fig_h))
+    axes = np.array(axes).reshape(-1)
+
+    for ax, (_, row) in zip(axes, cases_df.iterrows()):
+        x, _ = _unpack_sample(dataset[int(row["index"])])
+        img = denorm_to_rgb(x, mean=mean, std=std)
+
+        ax.imshow(img)
+        ax.set_title(
+            "\n".join(
+                [
+                    f"id={row['sample_id']}",
+                    f"true={row['true_name']}",
+                    f"pred={row['pred_name']}",
+                    f"p={row['pred_conf']:.3f}",
+                ]
+            ),
+            fontsize=9,
+        )
+        ax.axis("off")
+
+    for ax in axes[n:]:
+        ax.axis("off")
+
+    if title is not None:
+        fig.suptitle(title, fontsize=14)
+        plt.tight_layout(rect=[0, 0, 1, 0.97])
+    else:
+        plt.tight_layout()
+
+    plt.show()
+
+def top_n_for_confusion_pair(
+    df: pd.DataFrame,
+    true_class: str | int,
+    pred_class: str | int,
+    *,
+    n: int = 30,
+    sort_by: str = "pred_conf",
+) -> pd.DataFrame:
+    """
+    Filter rows for a specific confusion pair:
+      true = true_class, pred = pred_class
+
+    sort_by:
+      - "pred_conf"       : most confident wrong predictions first
+      - "wrongness_score" : biggest pred_conf - true_conf first
+      - "entropy"         : most uncertain among that pair
+      - "margin"          : smallest top1-top2 margin first
+    """
+    n = min(n, 30)
+
+    if isinstance(true_class, str):
+        mask_true = df["true_name"] == true_class
+    else:
+        mask_true = df["true_idx"] == true_class
+
+    if isinstance(pred_class, str):
+        mask_pred = df["pred_name"] == pred_class
+    else:
+        mask_pred = df["pred_idx"] == pred_class
+
+    subset = df.loc[mask_true & mask_pred & (~df["correct"])].copy()
+
+    if sort_by == "pred_conf":
+        subset = subset.sort_values(["pred_conf", "entropy"], ascending=[False, True])
+    elif sort_by == "wrongness_score":
+        subset = subset.sort_values(["wrongness_score", "pred_conf"], ascending=[False, False])
+    elif sort_by == "entropy":
+        subset = subset.sort_values(["entropy", "pred_conf"], ascending=[False, False])
+    elif sort_by == "margin":
+        subset = subset.sort_values(["margin", "pred_conf"], ascending=[True, False])
+    else:
+        raise ValueError("sort_by must be one of: pred_conf, wrongness_score, entropy, margin")
+
+    return subset.head(n).reset_index(drop=True)
+
+def most_common_confusion_pairs(
+    df: pd.DataFrame,
+    *,
+    top_k: int = 10,
+) -> pd.DataFrame:
+    """
+    Returns the most frequent off-diagonal confusion pairs.
+    """
+    mistakes = df.loc[~df["correct"]].copy()
+
+    if mistakes.empty:
+        return pd.DataFrame(
+            columns=["true_name", "pred_name", "count", "mean_pred_conf", "mean_wrongness_score"]
+        )
+
+    out = (
+        mistakes.groupby(["true_name", "pred_name"], as_index=False)
+        .agg(
+            count=("index", "count"),
+            mean_pred_conf=("pred_conf", "mean"),
+            mean_wrongness_score=("wrongness_score", "mean"),
+        )
+        .sort_values(["count", "mean_pred_conf"], ascending=[False, False])
+        .head(top_k)
+        .reset_index(drop=True)
+    )
+
+    out["mean_pred_conf"] = out["mean_pred_conf"].round(4)
+    out["mean_wrongness_score"] = out["mean_wrongness_score"].round(4)
+    return out
+
+def compare_prediction_tables(
+    before_df: pd.DataFrame,
+    after_df: pd.DataFrame,
+    *,
+    key: str = "sample_id",
+) -> pd.DataFrame:
+    """
+    Compare per-sample predictions from two models/checkpoints.
+
+    key:
+      - "sample_id" preferred if stable
+      - "index" okay if same dataset ordering
+    """
+    before = before_df.copy()
+    after = after_df.copy()
+
+    keep_cols = [
+        key,
+        "index",
+        "true_idx",
+        "true_name",
+        "pred_idx",
+        "pred_name",
+        "correct",
+        "pred_conf",
+        "true_conf",
+        "wrongness_score",
+        "entropy",
+        "margin",
+    ]
+
+    before = before[keep_cols].rename(
+        columns={
+            "pred_idx": "pred_idx_before",
+            "pred_name": "pred_name_before",
+            "correct": "correct_before",
+            "pred_conf": "pred_conf_before",
+            "true_conf": "true_conf_before",
+            "wrongness_score": "wrongness_score_before",
+            "entropy": "entropy_before",
+            "margin": "margin_before",
+        }
+    )
+
+    after = after[keep_cols].rename(
+        columns={
+            "pred_idx": "pred_idx_after",
+            "pred_name": "pred_name_after",
+            "correct": "correct_after",
+            "pred_conf": "pred_conf_after",
+            "true_conf": "true_conf_after",
+            "wrongness_score": "wrongness_score_after",
+            "entropy": "entropy_after",
+            "margin": "margin_after",
+        }
+    )
+
+    merged = before.merge(
+        after,
+        on=[key, "index", "true_idx", "true_name"],
+        how="inner",
+        validate="one_to_one",
+    )
+
+    merged["became_correct"] = (~merged["correct_before"]) & (merged["correct_after"])
+    merged["became_wrong"] = (merged["correct_before"]) & (~merged["correct_after"])
+
+    merged["delta_pred_conf"] = merged["pred_conf_after"] - merged["pred_conf_before"]
+    merged["delta_true_conf"] = merged["true_conf_after"] - merged["true_conf_before"]
+    merged["delta_wrongness_score"] = (
+        merged["wrongness_score_after"] - merged["wrongness_score_before"]
+    )
+    merged["delta_entropy"] = merged["entropy_after"] - merged["entropy_before"]
+    merged["delta_margin"] = merged["margin_after"] - merged["margin_before"]
+
+    return merged
+
+def top_n_fixed_cases(comp_df: pd.DataFrame, n: int = 30) -> pd.DataFrame:
+    """
+    Samples that were wrong before and became correct after.
+    Prioritize cases where true-class confidence improved the most.
+    """
+    n = min(n, 30)
+    return (
+        comp_df.loc[comp_df["became_correct"]]
+        .sort_values(["delta_true_conf", "pred_conf_after"], ascending=[False, False])
+        .head(n)
+        .reset_index(drop=True)
+    )
+
+
+def top_n_regressions(comp_df: pd.DataFrame, n: int = 30) -> pd.DataFrame:
+    """
+    Samples that were correct before and became wrong after.
+    """
+    n = min(n, 30)
+    return (
+        comp_df.loc[comp_df["became_wrong"]]
+        .sort_values(["delta_wrongness_score", "pred_conf_after"], ascending=[False, False])
+        .head(n)
+        .reset_index(drop=True)
+    )
+
+
+def top_n_still_boldly_wrong_after(comp_df: pd.DataFrame, n: int = 30) -> pd.DataFrame:
+    """
+    Cases wrong in both versions, but still very confidently wrong after.
+    """
+    n = min(n, 30)
+    subset = comp_df.loc[(~comp_df["correct_before"]) & (~comp_df["correct_after"])].copy()
+    return (
+        subset.sort_values(["wrongness_score_after", "pred_conf_after"], ascending=[False, False])
+        .head(n)
+        .reset_index(drop=True)
+    )
+
+
+def summarize_comparison_cases(comp_df: pd.DataFrame) -> pd.DataFrame:
+    cols = [
+        "sample_id",
+        "index",
+        "true_name",
+        "pred_name_before",
+        "pred_name_after",
+        "correct_before",
+        "correct_after",
+        "pred_conf_before",
+        "pred_conf_after",
+        "true_conf_before",
+        "true_conf_after",
+        "wrongness_score_before",
+        "wrongness_score_after",
+    ]
+    out = comp_df[cols].copy()
+
+    for c in [
+        "pred_conf_before",
+        "pred_conf_after",
+        "true_conf_before",
+        "true_conf_after",
+        "wrongness_score_before",
+        "wrongness_score_after",
+    ]:
+        out[c] = out[c].round(4)
+
+    return out
+
+
+def comparison_rows_to_case_grid_df(
+    comp_df: pd.DataFrame,
+    *,
+    use_after: bool = True,
+) -> pd.DataFrame:
+    """
+    Convert comparison rows into the same shape expected by plot_case_grid().
+    """
+    if use_after:
+        pred_name_col = "pred_name_after"
+        pred_conf_col = "pred_conf_after"
+    else:
+        pred_name_col = "pred_name_before"
+        pred_conf_col = "pred_conf_before"
+
+    return pd.DataFrame(
+        {
+            "index": comp_df["index"],
+            "sample_id": comp_df["sample_id"],
+            "true_name": comp_df["true_name"],
+            "pred_name": comp_df[pred_name_col],
+            "pred_conf": comp_df[pred_conf_col],
+        }
+    )
+
