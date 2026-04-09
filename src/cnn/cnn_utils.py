@@ -423,6 +423,18 @@ def _is_better(current: float, best: float, mode: Literal["min", "max"]) -> bool
         return current < best
     raise ValueError(f"Unsupported best mode: {mode}")
 
+def _is_significant_improvement(
+    current: float,
+    best: float,
+    mode: Literal["min", "max"],
+    min_delta: float,
+) -> bool:
+    if mode == "max":
+        return current > best + min_delta
+    if mode == "min":
+        return current < best - min_delta
+    raise ValueError(f"Unsupported mode: {mode}")    
+
 
 # ============================================================================
 # Core methods
@@ -556,6 +568,9 @@ def train_model(
     best_epoch = 0
     best_state = copy.deepcopy(model.state_dict())
 
+    epochs_without_improvement = 0
+    stopped_early = False
+
     for epoch in range(1, cfg.train.epochs + 1):
         train_metrics = train_one_epoch(
             model=model,
@@ -600,6 +615,7 @@ def train_model(
             )
 
         current_value = epoch_metrics[cfg.train.best_metric]
+<<<<<<< Updated upstream
         print(
             "epoch", epoch,
             "train_acc", epoch_metrics["train/accuracy"],
@@ -608,19 +624,48 @@ def train_model(
             "current", current_value,
         )
         if _is_better(current_value, best_value, cfg.train.best_mode):
+=======
+
+        if _is_significant_improvement(
+            current=current_value,
+            best=best_value,
+            mode=cfg.train.best_mode,
+            min_delta=cfg.train.early_stopping_min_delta,
+        ):
+>>>>>>> Stashed changes
             best_value = current_value
             best_epoch = epoch
             best_state = copy.deepcopy(model.state_dict())
+            epochs_without_improvement = 0
 
             epoch_metrics["best/epoch_so_far"] = float(best_epoch)
             epoch_metrics[f"best/{cfg.train.best_metric}_so_far"] = float(best_value)
+<<<<<<< Updated upstream
             print(">>> updating best_state at epoch", epoch, "to", current_value)
+=======
+        else:
+            epochs_without_improvement += 1
+>>>>>>> Stashed changes
 
         _append_to_history(history, epoch_metrics)
 
         if cfg.wandb.log_epoch_metrics and (epoch % cfg.wandb.log_every_n_epochs == 0):
             log_metrics_to_wandb(epoch_metrics, cfg)
 
+<<<<<<< Updated upstream
+=======
+        if cfg.train.early_stopping and val_loader is not None:
+            if epochs_without_improvement >= cfg.train.early_stopping_patience:
+                stopped_early = True
+                print(
+                    f"Early stopping triggered at epoch {epoch:03d}. "
+                    f"No improvement in '{cfg.train.best_metric}' for "
+                    f"{cfg.train.early_stopping_patience} epoch(s)."
+                )
+                break
+
+        # console output
+>>>>>>> Stashed changes
         msg = (
             f"Epoch [{epoch:03d}/{cfg.train.epochs:03d}] "
             f"| train_loss={epoch_metrics['train/loss']:.4f} "
@@ -640,6 +685,8 @@ def train_model(
         "best_epoch": best_epoch,
         "best_metric_name": cfg.train.best_metric,
         "best_metric_value": best_value,
+        "Stopped_early": stopped_early,
+        "epochs_completed": epoch,
     }
 
     return model, history, result

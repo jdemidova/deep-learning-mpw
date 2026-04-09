@@ -71,6 +71,11 @@ class TrainConfig:
     best_metric: str = "val/accuracy"
     best_mode: Literal["min", "max"] = "max"
 
+    # early stopping
+    early_stopping: bool = False
+    early_stopping_patience: int = 5
+    early_stopping_min_delta: float = 1e-4
+
     # optional reproducibility
     seed: Optional[int] = None
 
