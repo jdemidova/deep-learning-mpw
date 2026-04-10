@@ -550,6 +550,28 @@ def train_model(
     cfg: ExperimentConfig,
     val_loader: Optional[DataLoader] = None,
 ) -> tuple[nn.Module, dict[str, list[float]], dict[str, Any]]:
+    # Version on 09.04.2026 by @jdemidova:
+    # - one tracker
+    # - every tiny improvement resets patience
+    # - checkpointing is correct
+    # - early stopping is too permissive / noisy
+    #
+    # Version on 10.04.2026 by @drowningAstronaut:
+    # - one tracker
+    # - only significant improvement resets patience
+    # - early stopping is decent
+    # - checkpointing can be wrong
+
+    # New version after resolving git conflicts (@jdemidova):
+    # - two trackers
+    # - checkpointing stays correct
+    # - early stopping keeps min_delta semantics
+
+    # Result:
+    # Separate "best checkpoint" from "best early-stopping reference":
+    # checkpointing should track any real improvement,
+    # while early stopping should only react to improvements > min_delta.
+
     set_seed(cfg.train.seed)
 
     device = torch.device(cfg.train.device)
@@ -564,9 +586,18 @@ def train_model(
 
     history: dict[str, list[float]] = {}
 
-    best_value = float("-inf") if cfg.train.best_mode == "max" else float("inf")
+    init_best = float("-inf") if cfg.train.best_mode == "max" else float("inf")
+
+    # Tracks the actual best checkpoint so far.
+    # This should update on any real improvement, even tiny.
+    best_value = init_best
     best_epoch = 0
     best_state = copy.deepcopy(model.state_dict())
+
+    # Tracks the reference point for early stopping.
+    # This should update only on significant improvement (min_delta),
+    # otherwise slow cumulative gains would never reset patience correctly.
+    best_es_value = init_best
 
     epochs_without_improvement = 0
     stopped_early = False
@@ -592,8 +623,12 @@ def train_model(
                 prefix="val",
             )
             epoch_metrics.update(val_metrics)
-            epoch_metrics["gap/accuracy"] = epoch_metrics["train/accuracy"] - epoch_metrics["val/accuracy"]
-            epoch_metrics["gap/loss"] = epoch_metrics["val/loss"] - epoch_metrics["train/loss"]
+            epoch_metrics["gap/accuracy"] = (
+                epoch_metrics["train/accuracy"] - epoch_metrics["val/accuracy"]
+            )
+            epoch_metrics["gap/loss"] = (
+                epoch_metrics["val/loss"] - epoch_metrics["train/loss"]
+            )
 
         if scheduler is not None:
             if cfg.scheduler.step_metric is None:
@@ -615,57 +650,43 @@ def train_model(
             )
 
         current_value = epoch_metrics[cfg.train.best_metric]
-<<<<<<< Updated upstream
-        print(
-            "epoch", epoch,
-            "train_acc", epoch_metrics["train/accuracy"],
-            "val_acc", epoch_metrics.get("val/accuracy"),
-            "best_before", best_value,
-            "current", current_value,
-        )
-        if _is_better(current_value, best_value, cfg.train.best_mode):
-=======
 
-        if _is_significant_improvement(
+        # Important:
+        # - best_value is for checkpoint selection: update on ANY true improvement
+        # - best_es_value is for early stopping: update only on SIGNIFICANT improvement
+        #
+        # Why split them?
+        # If we use min_delta for checkpointing, we may fail to save the numerically best model.
+        # If we use the moving checkpoint best for early stopping, slow cumulative improvements
+        # can fail to reset patience and make early stopping too aggressive.
+        improved = _is_better(current_value, best_value, cfg.train.best_mode)
+        significant_improvement = _is_significant_improvement(
             current=current_value,
-            best=best_value,
+            best=best_es_value,
             mode=cfg.train.best_mode,
             min_delta=cfg.train.early_stopping_min_delta,
-        ):
->>>>>>> Stashed changes
+        )
+
+        if improved:
             best_value = current_value
             best_epoch = epoch
             best_state = copy.deepcopy(model.state_dict())
-            epochs_without_improvement = 0
 
-            epoch_metrics["best/epoch_so_far"] = float(best_epoch)
-            epoch_metrics[f"best/{cfg.train.best_metric}_so_far"] = float(best_value)
-<<<<<<< Updated upstream
-            print(">>> updating best_state at epoch", epoch, "to", current_value)
-=======
-        else:
-            epochs_without_improvement += 1
->>>>>>> Stashed changes
+        epoch_metrics["best/epoch_so_far"] = float(best_epoch)
+        epoch_metrics[f"best/{cfg.train.best_metric}_so_far"] = float(best_value)
+
+        if cfg.train.early_stopping and val_loader is not None:
+            if significant_improvement:
+                best_es_value = current_value
+                epochs_without_improvement = 0
+            else:
+                epochs_without_improvement += 1
 
         _append_to_history(history, epoch_metrics)
 
         if cfg.wandb.log_epoch_metrics and (epoch % cfg.wandb.log_every_n_epochs == 0):
             log_metrics_to_wandb(epoch_metrics, cfg)
 
-<<<<<<< Updated upstream
-=======
-        if cfg.train.early_stopping and val_loader is not None:
-            if epochs_without_improvement >= cfg.train.early_stopping_patience:
-                stopped_early = True
-                print(
-                    f"Early stopping triggered at epoch {epoch:03d}. "
-                    f"No improvement in '{cfg.train.best_metric}' for "
-                    f"{cfg.train.early_stopping_patience} epoch(s)."
-                )
-                break
-
-        # console output
->>>>>>> Stashed changes
         msg = (
             f"Epoch [{epoch:03d}/{cfg.train.epochs:03d}] "
             f"| train_loss={epoch_metrics['train/loss']:.4f} "
@@ -679,13 +700,23 @@ def train_model(
         msg += f"| time={epoch_metrics['train/time_sec']:.1f}s"
         print(msg)
 
+        if cfg.train.early_stopping and val_loader is not None:
+            if epochs_without_improvement >= cfg.train.early_stopping_patience:
+                stopped_early = True
+                print(
+                    f"Early stopping triggered at epoch {epoch:03d}. "
+                    f"No significant improvement in '{cfg.train.best_metric}' for "
+                    f"{cfg.train.early_stopping_patience} epoch(s)."
+                )
+                break
+
     model.load_state_dict(best_state)
 
     result = {
         "best_epoch": best_epoch,
         "best_metric_name": cfg.train.best_metric,
         "best_metric_value": best_value,
-        "Stopped_early": stopped_early,
+        "stopped_early": stopped_early,
         "epochs_completed": epoch,
     }
 
