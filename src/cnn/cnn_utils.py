@@ -12,12 +12,13 @@ from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
 
 import wandb
 
-from collections import Counter
+from collections import Counter, defaultdict
 from collections.abc import Callable, Sequence
 
 import torch
 import torch.nn as nn
 from torchvision import datasets, transforms
+from torch.utils.data import DataLoader, Subset
 
 from src.cnn.configs import DatasetConfig
 from src.cnn.cnn_registry import build_model
@@ -1587,3 +1588,119 @@ def comparison_rows_to_case_grid_df(
         }
     )
 
+
+
+
+def _effective_pin_memory(cfg):
+    # keep your existing implementation if you already have it
+    return getattr(cfg.loader, "pin_memory", False)
+
+
+def _extract_labels(dataset):
+    """
+    Tries to get labels from common PyTorch dataset formats.
+    Works for ImageFolder-like datasets and also Subset-wrapped datasets.
+    """
+    if isinstance(dataset, Subset):
+        base_labels = _extract_labels(dataset.dataset)
+        return [base_labels[i] for i in dataset.indices]
+
+    if hasattr(dataset, "targets"):
+        labels = dataset.targets
+    elif hasattr(dataset, "labels"):
+        labels = dataset.labels
+    else:
+        raise ValueError(
+            "Cannot extract labels automatically. "
+            "Dataset must have `.targets` or `.labels`."
+        )
+
+    # normalize to plain Python ints if needed
+    out = []
+    for x in labels:
+        if torch.is_tensor(x):
+            out.append(int(x.item()))
+        else:
+            out.append(int(x))
+    return out
+
+
+def _extract_class_names(dataset):
+    """
+    Tries to get class names. Falls back to stringified class ids.
+    """
+    if isinstance(dataset, Subset):
+        return _extract_class_names(dataset.dataset)
+
+    if hasattr(dataset, "classes"):
+        return list(dataset.classes)
+
+    labels = _extract_labels(dataset)
+    unique_labels = sorted(set(labels))
+    return [str(i) for i in unique_labels]
+
+
+def make_stratified_fraction_train_loader(
+    train_dataset,
+    cfg,
+    fraction: float = 0.1,   # 0.1 = 1/10, 0.2 = 1/5
+    seed: int = 42,
+    verbose: bool = True,
+):
+    if not (0 < fraction <= 1):
+        raise ValueError(f"fraction must be in (0, 1], got {fraction}")
+
+    labels = _extract_labels(train_dataset)
+    class_names = _extract_class_names(train_dataset)
+
+    class_to_indices = defaultdict(list)
+    for idx, y in enumerate(labels):
+        class_to_indices[y].append(idx)
+
+    g = torch.Generator().manual_seed(seed)
+    subset_indices = []
+
+    original_counts = {}
+    subset_counts = {}
+
+    for cls in sorted(class_to_indices.keys()):
+        cls_indices = class_to_indices[cls]
+        n_total = len(cls_indices)
+        n_keep = max(1, math.floor(n_total * fraction))
+
+        perm = torch.randperm(n_total, generator=g).tolist()
+        chosen = [cls_indices[i] for i in perm[:n_keep]]
+
+        subset_indices.extend(chosen)
+        original_counts[cls] = n_total
+        subset_counts[cls] = n_keep
+
+    # optional: shuffle final subset order so classes are mixed
+    final_perm = torch.randperm(len(subset_indices), generator=g).tolist()
+    subset_indices = [subset_indices[i] for i in final_perm]
+
+    short_train_dataset = Subset(train_dataset, subset_indices)
+
+    if verbose:
+        print(f"Original train size: {len(train_dataset)}")
+        print(f"Subset train size:   {len(short_train_dataset)}")
+        print(f"Fraction:            {fraction}")
+        print()
+
+        for cls in sorted(subset_counts.keys()):
+            cls_name = class_names[cls] if cls < len(class_names) else str(cls)
+            print(
+                f"class {cls:>2} ({cls_name}): "
+                f"{subset_counts[cls]} / {original_counts[cls]}"
+            )
+
+    train_loader = DataLoader(
+        short_train_dataset,
+        batch_size=cfg.loader.batch_size,
+        shuffle=cfg.loader.train_shuffle,
+        num_workers=cfg.loader.num_workers,
+        pin_memory=_effective_pin_memory(cfg),
+        drop_last=cfg.loader.drop_last_train,
+    )
+
+    return train_loader, short_train_dataset
