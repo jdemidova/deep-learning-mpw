@@ -651,6 +651,13 @@ def train_model(
             )
 
         current_value = epoch_metrics[cfg.train.best_metric]
+        print(
+            "epoch", epoch,
+            "train_acc", epoch_metrics["train/accuracy"],
+            "val_acc", epoch_metrics.get("val/accuracy"),
+            "best_before", best_value,
+            "current", current_value,
+        )
 
         # Important:
         # - best_value is for checkpoint selection: update on ANY true improvement
@@ -784,6 +791,50 @@ def train_and_evaluate_model(
         torch.mps.empty_cache()
 
     if run is not None:
+
+        # =========================================================
+        # CONFUSION MATRIX LOGGING
+        # =========================================================
+        if (
+            cfg.wandb.enabled
+            and cfg.wandb.mode != "disabled"
+            and cfg.wandb.log_confusion_matrix
+        ):
+            split = cfg.wandb.confusion_matrix_split.lower()
+
+            if split == "val" and val_loader is not None:
+                cm_loader = val_loader
+                cm_key = "val/confusion_matrix"
+                cm_title = cfg.wandb.confusion_matrix_title or "Validation Confusion Matrix"
+
+            elif split == "test" and test_loader is not None:
+                cm_loader = test_loader
+                cm_key = "test/confusion_matrix"
+                cm_title = cfg.wandb.confusion_matrix_title or "Test Confusion Matrix"
+
+            else:
+                cm_loader = None
+
+            if cm_loader is not None:
+                y_true, y_pred = predict_loader(
+                    trained_model,
+                    cm_loader,
+                    cfg,
+                    return_probs=False,
+                )
+
+                class_names = None
+                if hasattr(cm_loader.dataset, "classes"):
+                    class_names = list(cm_loader.dataset.classes)
+
+                log_confusion_matrix(
+                    y_true=y_true,
+                    y_pred=y_pred,
+                    class_names=class_names,
+                    key=cm_key,
+                    title=cm_title,
+                    split_table=cfg.wandb.confusion_matrix_split_table,
+                )
         wandb.finish()
 
     return trained_model, history, result
