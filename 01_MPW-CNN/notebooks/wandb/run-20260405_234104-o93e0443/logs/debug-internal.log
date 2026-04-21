@@ -1,8 +1,0 @@
-{"time":"2026-04-05T23:41:06.8449644+02:00","level":"INFO","msg":"stream: starting","core version":"0.25.0"}
-{"time":"2026-04-05T23:41:07.165792+02:00","level":"INFO","msg":"stream: created new stream","id":"o93e0443"}
-{"time":"2026-04-05T23:41:07.165792+02:00","level":"INFO","msg":"handler: started","stream_id":"o93e0443"}
-{"time":"2026-04-05T23:41:07.1662945+02:00","level":"INFO","msg":"stream: started","id":"o93e0443"}
-{"time":"2026-04-05T23:41:07.1662945+02:00","level":"INFO","msg":"writer: started","stream_id":"o93e0443"}
-{"time":"2026-04-05T23:41:07.1662945+02:00","level":"INFO","msg":"sender: started","stream_id":"o93e0443"}
-{"time":"2026-04-05T23:44:43.3995991+02:00","level":"ERROR","msg":"api: HTTP error","status":404,"method":"POST","url":"https://api.wandb.ai/files/MSE_DeLearn_SPR26/MPW-CNN/o93e0443/file_stream"}
-{"time":"2026-04-05T23:44:43.3995991+02:00","level":"ERROR+4","msg":"filestream: fatal error: filestream: failed to upload: 404 Not Found url=https://api.wandb.ai/files/MSE_DeLearn_SPR26/MPW-CNN/o93e0443/file_stream: {\"error\":\"run MPW-CNN/o93e0443 not found while streaming file\"}"}
