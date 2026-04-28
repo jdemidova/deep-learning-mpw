@@ -2,6 +2,8 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from typing import Optional
 
+import numpy as np
+
 
 class CompGraph:
     """A simple computational graph entry point.
@@ -270,12 +272,13 @@ class AddNode(MetaNode):
             out_node: Output node receiving the sum.
         """
         super().__init__()
-        # build connections to ValueNode objects
+
         for node in in_nodes:
             node.connect_to(self)
         self.connect_to(out_node)
-        # initialize internal values - here the input is a list of values
-        self.inputs: list[float] = []
+
+        self._received_count = 0
+        self.inputs = []
 
     def receive_parent_value(self, v: float):
         """Append one addend and mark ready when all addends are present."""
@@ -356,3 +359,61 @@ class SquareNode(MetaNode):
     # class MSELossNode(MetaNode):
     # Advice: mimic the MultiplyNode and adapt the forward() and
     # backward() methods
+
+
+
+
+#  FROM IULIIA
+class MSELossNode(MetaNode):
+    """MSE loss node: J = mean((y_hat - y)^2)."""
+
+    def __init__(self, y_hat: ValueNode, y: ValueNode, out: ValueNode):
+        super().__init__()
+        # parents[0] = prediction y_hat, parents[1] = target y
+        y_hat.connect_to(self)
+        y.connect_to(self)
+        self.connect_to(out)
+        self._received_count = 0
+
+    def get_parent_values(self):
+        """Return values in fixed (y_hat, y) order."""
+        return self.parents[0].v, self.parents[1].v
+
+    def receive_parent_value(self, v):
+        """Track input arrival from parents."""
+        del v
+        if self._received_count >= 2:
+            raise Exception("This node accepts 2 inputs that are already filled")
+
+        self._received_count += 1
+        if self._received_count == 2:
+            self.input_ready = True
+
+    def reset_values(self):
+        """Reset readiness and recursively reset descendants."""
+        self._received_count = 0
+        self.input_ready = False
+        for node in self.children:
+            node.reset_values()
+
+    def forward(self):
+        if self.input_ready:
+            y_hat_val, y_val = self.get_parent_values()
+            diff = y_hat_val - y_val
+            mse = 0.5 * diff ** 2
+
+            for node in self.children:
+                node.receive_parent_value(mse)
+                node.forward()
+
+    def backward(self, grad_z):
+        y_hat_val, y_val = self.get_parent_values()
+        diff = y_hat_val - y_val
+
+        grad_y_hat = diff * grad_z
+        grad_y = -diff * grad_z
+
+        self.parents[0].backward(grad_y_hat)
+        self.parents[1].backward(grad_y)
+
+
