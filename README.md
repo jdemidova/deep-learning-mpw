@@ -1,22 +1,26 @@
-# Description
+# Repository Description
 This repository contains the results of mandatory practice works (MPWs) for MSE module Deep Learning (Spring 2026)
 
 ## Part 1: CNN 
-Timeframe: From 18.03.2026 until 15.04.2026
+* Timeframe: From 18.03.2026 until 15.04.2026
+* NBs: `./notebooks/cnn/`
+* See README for the task: `./notebooks/cnn/README.md`
 
 ## Part 2: CG (Computational Graphs and Optimizers)
-Timeframe: From 20.04.2026 until 18.05.2026
+* Timeframe: From 20.04.2026 until 18.05.2026
+* NBs: `./notebooks/cg/`
+* See README for the task: `./notebooks/cg/README.md`
 
 ## Part 3: AL
 Timeframe: From 18.05.2026 until 27.05.2026????
 
 # Project structure
-## Tasks description
-See `Task > ./documents/*`
-## Datasets
-See `Task > ./data/*`
+## Tasks
+See `../Task/` and `../Task/./documents/*`
+## Data
+See `Task/data/*`
 ## Submissions
-In a form of Jupyter NBs. See `./notebooks/*` and `README` inside. 
+In a form of Jupyter NBs or PDFs. See `./notebooks/*` and `README` inside. 
 ## Reusable Python code
 Put larger reusable methods and helpers in `./src/*`, and keep notebooks focused on experiments and reporting.
 

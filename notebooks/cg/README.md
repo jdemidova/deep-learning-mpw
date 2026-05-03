@@ -1,3 +1,49 @@
+# CG Task
+* Deadline: Mon, 18 May 23:59
+* Submission (report) format: PDF or Jupyter NB
+* Jupyter NB to complete: `notebooks/cg/cg-linear-regression-stud.ipynb`
+* **All original provided materials are in `02_MPW-CG` folder**
+* **All resulting files are in `notebooks/cg/` and `src/cg/`**
+
+## Goal
+Complete and experiment the implementation of a computational graph and of a training loop for linear 
+regression task. 
+
+## Requirements on report
+- _Clear, concise, and well-structured_,
+- Includes all _relevant details about your experiments_: 
+  - the **_hyperparameters_** you used, 
+  - the **_results_** you obtained,
+  - any **_insights or conclusions_** you can draw from your experiments.
+- **_States group members_** in the beginning of the report.
+
+## Objectives
+### Mandatory (main) objectives
+a) Understand the concepts of backpropagation and of forward and backward passes in the
+context of a computational graph.
+
+b) Implement new nodes in a computational graph.
+
+c) Implement a training loop with stochastic and batch approaches
+
+d) Reimplement and experiment with different optimization algorithms and compare their
+performance.
+
+### Optional objectives
+**Pick at least 2 of the following optional objectives** to further explore and analyze the performance
+of your models :
+1. Investigate the use of 2nd order model instead of the simple linear model.
+2. Re-implement and experiment with more advanced optimizers such as RMSProp, Nesterov
+3. or Adam.
+4. Implement an early stopping strategy in your training loop.
+5. Implement a Learning Rate Decay on Plateau strategy in the training loop.
+6. Normalize the input data with a zero norm approach and compare to your experiments 
+without normalization.
+
+------
+The whole text below was given in the original provided `README.md` file.
+
+------
 # Simple Computational Graph
 
 Minimal educational computational graph for scalar forward and backward
