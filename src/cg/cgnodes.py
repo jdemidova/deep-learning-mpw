@@ -361,9 +361,6 @@ class SquareNode(MetaNode):
     # backward() methods
 
 
-
-
-#  FROM IULIIA
 class MSELossNode(MetaNode):
     """MSE loss node: J = mean((y_hat - y)^2)."""
 
@@ -400,7 +397,8 @@ class MSELossNode(MetaNode):
         if self.input_ready:
             y_hat_val, y_val = self.get_parent_values()
             diff = y_hat_val - y_val
-            mse = 0.5 * diff ** 2
+            mse = 0.5 * diff ** 2 # Standard MSE for scalar values
+            # QUESTION @ Julia: shouldn't we divide by the number of elements in the batch? As in the formula in the NB?
 
             for node in self.children:
                 node.receive_parent_value(mse)
