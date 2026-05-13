@@ -47,7 +47,7 @@ def remove_jetbrains_fields(obj) -> int:
 def normalize_notebook_sources(nb: dict) -> int:
     """
     Normalize all cell.source values to strings.
-    This avoids regex/nbconvert crashes caused by list-based sources.
+    This avoids regex/nbconvert crashes caused by list-based provided_sources.
     """
     changed = 0
 
@@ -174,7 +174,7 @@ def convert_ipynb_to_pdf(
     print(f"Input notebook:          {notebook_path}")
     print(f"Output PDF:              {output_pdf}")
     print(f"Removed jetTransient:    {removed_jetbrains}")
-    print(f"Normalized cell sources: {normalized_sources}")
+    print(f"Normalized cell provided_sources: {normalized_sources}")
 
     if keep_html:
         print(f"Debug HTML:              {debug_html}")

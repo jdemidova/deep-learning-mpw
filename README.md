@@ -11,8 +11,10 @@ This repository contains the results of mandatory practice works (MPWs) for MSE 
 * NBs: `./notebooks/cg/`
 * See README for the task: `./notebooks/cg/README.md`
 
-## Part 3: AL
-Timeframe: From 18.05.2026 until 27.05.2026????
+## Part 3: IC (Image Captioning)
+* Timeframe: From 18.05.2026 until 03.06.2026
+* NBs: `./notebooks/ic/`
+* See README for the task: `./notebooks/cg/README.md`
 
 # Project structure
 ## Tasks
@@ -20,7 +22,7 @@ See `../Task/` and `../Task/./documents/*`
 ## Data
 See `Task/data/*`
 ## Submissions
-In a form of Jupyter NBs or PDFs. See `./notebooks/*` and `README` inside. 
+In a form of Jupyter NBs and/or PDFs. See `./notebooks/*` and `README` inside. 
 ## Reusable Python code
 Put larger reusable methods and helpers in `./src/*`, and keep notebooks focused on experiments and reporting.
 

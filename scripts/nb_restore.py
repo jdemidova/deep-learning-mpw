@@ -109,7 +109,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(
         description="Recover a real notebook embedded as JSON inside a notebook cell."
     )
-    parser.add_argument("src", type=Path, help="Path to the broken .ipynb notebook")
+    parser.add_argument("provided_sources", type=Path, help="Path to the broken .ipynb notebook")
     parser.add_argument(
         "-o",
         "--output",

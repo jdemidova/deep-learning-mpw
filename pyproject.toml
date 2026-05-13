@@ -9,14 +9,20 @@ authors = [
 ]
 dependencies = [
   "grad-cam>=1.5.5",
+  "ipykernel>=7.2.0",
+  "jupyterlab>=4.5.7",
   "matplotlib>=3.10.8",
   "nbformat>=5.10.4",
+  "nltk>=3.9.4",
   "numpy>=2.4.3",
   "pandas>=3.0.1",
   "pandoc>=2.4",
+  "pillow>=12.1.1",
   "torch>=2.10.0",
   "torchsummary>=1.5.1",
+  "torchvision>=0.25.0",
   "torchviz>=0.0.3",
+  "tqdm>=4.67.3",
   "wandb>=0.25.1",
 ]
 
