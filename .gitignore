@@ -2,8 +2,6 @@
 .ipynb_checkpoints/
 *.pt
 *.pth
-
-# MPW1
 notebooks/cnn/wandb_logs/
 notebooks/cnn/wandb/
 notebooks/wandb/
@@ -15,9 +13,6 @@ notebooks/wandb/
 data/icosimal_img_class_03/
 artifacts/
 outputs/
-
-# MPW3
-notebooks/ic/data/images/
 
 
 
@@ -44,3 +39,7 @@ env/
 # IDEs
 .idea/
 .vscode/
+
+
+/notebooks/ic/data/images/
+/notebooks/ic/wandb/
