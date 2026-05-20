@@ -144,7 +144,7 @@ class CaptionModelConfig:
     embed_dim: int = 256
     hidden_dim: int = 512
     num_lstm_layers: int = 1
-    dropout: float = 0.3
+    dropout: float = 0.5
 
     # attention model only!
     attention_dim: int = 256
