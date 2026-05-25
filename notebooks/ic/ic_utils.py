@@ -26,7 +26,7 @@ from tokenizer import tokenize
 # GENERAL HELPERS
 # =========================================================
 def seed_everything(seed: int = 13) -> None:
-    """Make experiments more reproducible."""
+    """Seed Python, NumPy, and PyTorch so repeated runs are more comparable."""
     random.seed(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
@@ -40,7 +40,7 @@ def seed_everything(seed: int = 13) -> None:
 
 
 def resolve_device(cfg=None) -> torch.device:
-    """Resolve device from config, with auto fallback."""
+    """Return the configured device, or choose the best available accelerator."""
     if cfg is not None:
         device_name = getattr(cfg.train, "device", "auto")
         if device_name not in (None, "auto"):
@@ -58,7 +58,10 @@ def move_batch_to_device(
     non_blocking: bool = True,
 ):
     """
-    Move tensor parts of dataset batch to device, keep metadata unchanged
+    Move tensor fields from a dataloader batch to the chosen device.
+
+    The dataset batch also contains image IDs and raw captions. Those are Python
+    metadata, not tensors, so they stay on the CPU unchanged.
     """
     images, captions, lengths, image_ids, raw_captions = batch
 
@@ -72,7 +75,7 @@ def move_batch_to_device(
 
 
 def truncate_after_eos(token_ids: list[int], eos_idx: int) -> list[int]:
-    """Keep tokens only up to and including <eos>, if present."""
+    """Drop generated tokens after the first <eos> token."""
     if eos_idx in token_ids:
         return token_ids[: token_ids.index(eos_idx) + 1]
     return token_ids
@@ -85,23 +88,23 @@ def truncate_after_eos(token_ids: list[int], eos_idx: int) -> list[int]:
 def split_caption_inputs_targets(captions: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
     """
     Shift captions for teacher-forced next-token prediction.
-    Task: teacher forcing / shifted next-token prediction.
 
     caption:  <bos> a dog runs <eos>
     input:    <bos> a dog runs
     target:        a dog runs <eos>
+
+    The model sees the prefix and is trained to predict the next token at each
+    position. <eos> remains in the target so the model learns when to stop.
     """
     return captions[:, :-1].contiguous(), captions[:, 1:].contiguous()
 
 
 def extract_logits(model_output: Any) -> torch.Tensor:
     """
-    Support both:
-      logits
-      (logits, extra)
-      {"logits": logits, ...}
+    Return logits from common model output formats.
 
-    Task: allows models to share the same training loop.
+    This lets the shared training loop support simple models returning only
+    logits and richer models returning extra values such as attention weights.
     """
     if isinstance(model_output, tuple):
         return model_output[0]
@@ -109,20 +112,28 @@ def extract_logits(model_output: Any) -> torch.Tensor:
         return model_output["logits"]
     return model_output
 
-def train_one_epoch(
+def _run_teacher_forced_epoch(
     model: nn.Module,
     loader,
-    optimizer: torch.optim.Optimizer,
     cfg,
-    desc: str = "train",
+    desc: str,
+    optimizer: torch.optim.Optimizer | None = None,
 ) -> dict[str, float]:
-    """One teacher-forced training epoch."""
+    """
+    Run one teacher-forced epoch for either training or evaluation.
+
+    Passing an optimizer enables gradients and parameter updates. Passing
+    optimizer=None switches to evaluation mode and disables gradient tracking.
+    """
     device = resolve_device(cfg)
     pad_idx = cfg.model.pad_idx
-    grad_clip_norm = cfg.train.grad_clip_norm
     non_blocking = cfg.train.non_blocking
+    is_train = optimizer is not None
 
-    model.train()
+    if is_train:
+        model.train()
+    else:
+        model.eval()
 
     total_loss_sum = 0.0
     total_tokens = 0
@@ -130,30 +141,41 @@ def train_one_epoch(
     progress = tqdm(loader, desc=desc, leave=False)
 
     for batch in progress:
-        images, captions, lengths, image_ids, raw_captions = move_batch_to_device(
-            batch,
-            device=device,
-            non_blocking=non_blocking,
-        )
+        # Use one loop for train and eval; only the train path builds gradients.
+        with torch.set_grad_enabled(is_train):
+            images, captions, lengths, image_ids, raw_captions = move_batch_to_device(
+                batch,
+                device=device,
+                non_blocking=non_blocking,
+            )
 
-        decoder_inputs, targets = split_caption_inputs_targets(captions)
+            decoder_inputs, targets = split_caption_inputs_targets(captions)
 
-        optimizer.zero_grad(set_to_none=True)
+            if is_train:
+                # set_to_none=True is a small memory/performance optimization.
+                optimizer.zero_grad(set_to_none=True)
 
-        model_output = model(images, decoder_inputs)
-        loss, num_tokens = compute_captioning_loss(
-            model_output,
-            targets,
-            pad_idx=pad_idx,
-        )
+            model_output = model(images, decoder_inputs)
+            loss, num_tokens = compute_captioning_loss(
+                model_output,
+                targets,
+                pad_idx=pad_idx,
+            )
 
-        loss.backward()
+            if is_train:
+                loss.backward()
 
-        if grad_clip_norm is not None:
-            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=grad_clip_norm)
+                if cfg.train.grad_clip_norm is not None:
+                    # LSTMs can have unstable gradients; clipping limits spikes.
+                    torch.nn.utils.clip_grad_norm_(
+                        model.parameters(),
+                        max_norm=cfg.train.grad_clip_norm,
+                    )
 
-        optimizer.step()
+                optimizer.step()
 
+        # loss is averaged over non-pad tokens, so weight it back by token count
+        # before accumulating epoch-level metrics.
         total_loss_sum += float(loss.item()) * num_tokens
         total_tokens += num_tokens
 
@@ -170,6 +192,22 @@ def train_one_epoch(
         "perplexity": perplexity_from_loss(avg_loss),
     }
 
+def train_one_epoch(
+    model: nn.Module,
+    loader,
+    optimizer: torch.optim.Optimizer,
+    cfg,
+    desc: str = "train",
+) -> dict[str, float]:
+    """Train the model for one teacher-forced captioning epoch."""
+    return _run_teacher_forced_epoch(
+        model=model,
+        loader=loader,
+        cfg=cfg,
+        desc=desc,
+        optimizer=optimizer,
+    )
+
 # =========================================================
 # EVAL HELPERS
 # =========================================================
@@ -181,8 +219,10 @@ def decode_token_ids(
     skip_special_tokens: bool = True,
 ) -> str:
     """
-    Decode generated token IDs into readable text.
-    Task: requires separate generate() inference path
+    Convert generated token IDs into a readable caption string.
+
+    Generation may return extra tokens after <eos>; those are ignored before
+    passing IDs to the tokenizer.
     """
     if isinstance(token_ids, torch.Tensor):
         token_ids = token_ids.detach().cpu().tolist()
@@ -198,7 +238,7 @@ def token_ids_to_bleu_tokens(
     tokenizer,
     eos_idx: int,
 ) -> list[str]:
-    """Convert generated token IDs to tokenized text for BLEU"""
+    """Convert generated token IDs into tokenizer words used by BLEU."""
     decoded = decode_token_ids(
         token_ids,
         tokenizer=tokenizer,
@@ -209,8 +249,9 @@ def token_ids_to_bleu_tokens(
 
 def perplexity_from_loss(loss: float) -> float:
     """
-    Perplexity = exp(mean_cross_entropy).
-    Task: required perplexity metric.
+    Convert mean cross-entropy loss to perplexity.
+
+    The loss is clipped before exp() to avoid huge numbers if training diverges.
     """
     return float(math.exp(min(loss, 20.0)))
 
@@ -220,8 +261,10 @@ def compute_captioning_loss(
     pad_idx: int,
 ) -> tuple[torch.Tensor, int]:
     """
-    Cross-entropy over next-token predictions, ignoring <pad> targets.
-    Task: masked CE loss, ignoring <pad>
+    Compute masked next-token cross-entropy for captioning.
+
+    Only <pad> targets are ignored. <eos> is intentionally kept because it is a
+    real target token and teaches the decoder to terminate captions.
     """
     logits = extract_logits(model_output)
     vocab_size = logits.size(-1)
@@ -233,12 +276,12 @@ def compute_captioning_loss(
         reduction="sum",
     )
 
+    # Average over real caption tokens, not over padded sequence length.
     num_tokens = int((targets != pad_idx).sum().item())
     loss = loss_sum / max(num_tokens, 1)
 
     return loss, num_tokens
 
-@torch.no_grad()
 def evaluate_loss(
     model: nn.Module,
     loader,
@@ -246,51 +289,18 @@ def evaluate_loss(
     desc: str = "eval",
 ) -> dict[str, float]:
     """
-    Teacher-forced evaluation loss/perplexity.
-    Task: required perplexity metric
+    Evaluate teacher-forced validation/test loss and perplexity.
+
+    This uses the same shifted-input loss as training but does not update model
+    weights.
     """
-    device = resolve_device(cfg)
-    pad_idx = cfg.model.pad_idx
-    non_blocking = cfg.train.non_blocking
-
-    model.eval()
-
-    total_loss_sum = 0.0
-    total_tokens = 0
-
-    progress = tqdm(loader, desc=desc, leave=False)
-
-    for batch in progress:
-        images, captions, lengths, image_ids, raw_captions = move_batch_to_device(
-            batch,
-            device=device,
-            non_blocking=non_blocking,
-        )
-
-        decoder_inputs, targets = split_caption_inputs_targets(captions)
-
-        model_output = model(images, decoder_inputs)
-        loss, num_tokens = compute_captioning_loss(
-            model_output,
-            targets,
-            pad_idx=pad_idx,
-        )
-
-        total_loss_sum += float(loss.item()) * num_tokens
-        total_tokens += num_tokens
-
-        avg_loss = total_loss_sum / max(total_tokens, 1)
-        progress.set_postfix(
-            loss=f"{avg_loss:.4f}",
-            ppl=f"{perplexity_from_loss(avg_loss):.2f}",
-        )
-
-    avg_loss = total_loss_sum / max(total_tokens, 1)
-
-    return {
-        "loss": avg_loss,
-        "perplexity": perplexity_from_loss(avg_loss),
-    }
+    return _run_teacher_forced_epoch(
+        model=model,
+        loader=loader,
+        cfg=cfg,
+        desc=desc,
+        optimizer=None,
+    )
 
 @torch.no_grad()
 def evaluate_bleu(
@@ -302,12 +312,10 @@ def evaluate_bleu(
     max_batches: int | None = None,
 ) -> dict[str, float]:
     """
-    Corpus-level BLEU-1...BLEU-4.
+    Compute corpus-level BLEU-1 through BLEU-4 for generated captions.
 
     Generates one caption per image and compares it against all human references
     for the same image.
-
-    Task: required BLEU-1...BLEU-4
     """
     eos_idx = cfg.model.eos_idx
     hypotheses = []
@@ -321,6 +329,7 @@ def evaluate_bleu(
         generated_ids = generate_batch_token_ids(model, images, cfg)
 
         for image_id, pred_ids in zip(image_ids, generated_ids):
+            # BLEU expects every hypothesis to have a list of valid references.
             refs = references_by_image_id.get(image_id)
 
             if not refs:
@@ -333,6 +342,7 @@ def evaluate_bleu(
             )
 
             if len(hyp) == 0:
+                # NLTK BLEU cannot score an empty hypothesis.
                 hyp = ["<empty>"]
 
             references.append(refs)
@@ -346,6 +356,7 @@ def evaluate_bleu(
             "bleu_4": 0.0,
         }
 
+    # Smoothing avoids zero BLEU for short captions with missing higher n-grams.
     smoothing = SmoothingFunction().method1
 
     return {
@@ -380,8 +391,6 @@ def collect_fixed_eval_subset(loader, cfg=None, num_images: int | None = None):
     Collect fixed images for qualitative comparison.
 
     Same subset should be used for baseline, attention model, greedy decoding, beam search, etc.
-
-    Task: qualitative comparison of models
     """
     if num_images is None:
         num_images = cfg.evaluation.fixed_subset_size if cfg is not None else 8
@@ -416,8 +425,7 @@ def build_references_by_image_id(loader) -> dict[str, list[list[str]]]:
     Build BLEU references from all human captions.
 
     Use this with a deterministic test loader using caption_sampling='all'.
-
-    Task: required BLEU-1...BLEU-4.
+    The output shape is: image_id -> list of tokenized reference captions.
     """
     references = defaultdict(list)
 
@@ -437,12 +445,10 @@ def generate_batch_token_ids(
     cfg,
 ) -> torch.Tensor:
     """
-    Generate captions with model.generate().
+    Generate token IDs for a batch of images using the model inference API.
 
     Expected model API:
         model.generate(images, max_len, bos_idx, eos_idx)
-
-    Task: required separate generate() inference path
     """
     device = resolve_device(cfg)
 
@@ -456,6 +462,7 @@ def generate_batch_token_ids(
     )
 
     if isinstance(generated, tuple):
+        # Some models may return (token_ids, extra_info), e.g. attention maps.
         generated = generated[0]
 
     if not isinstance(generated, torch.Tensor):
@@ -468,7 +475,7 @@ def generate_batch_token_ids(
 # WANDB HELPERS
 # =========================================================
 def _wandb_safe(obj):
-    """Helper for W&B config serialization."""
+    """Convert config objects into values W&B can serialize as JSON."""
     if is_dataclass(obj):
         return _wandb_safe(asdict(obj))
     if isinstance(obj, dict):
@@ -488,15 +495,18 @@ def _wandb_safe(obj):
         json.dumps(obj)
         return obj
     except TypeError:
+        # Last resort for objects such as transforms or callables.
         return repr(obj)
 
 def _filter_wandb_metrics(metrics: dict, allowlist: set[str]) -> dict:
+    """Return only selected W&B metrics, always keeping the epoch index."""
     if not allowlist:
         return metrics
     return {"epoch": metrics["epoch"], **{k: v for k, v in metrics.items() if k in allowlist}}
 
 
 def _is_better(value: float, best: float | None, mode: str, cfg: ICExperimentConfig) -> bool:
+    """Decide whether a metric improves enough to replace the current best."""
     if best is None:
         return True
     if mode == "min":
@@ -504,6 +514,7 @@ def _is_better(value: float, best: float | None, mode: str, cfg: ICExperimentCon
     return value > best + cfg.train.early_stopping_min_delta
 
 def save_checkpoint(path, filename, model, cfg, extra=None):
+    """Save a portable checkpoint with model weights and model configuration."""
 
     model_cfg = cfg.model
 
@@ -519,7 +530,7 @@ def save_checkpoint(path, filename, model, cfg, extra=None):
 
 
 def build_optimizer_and_scheduler(model: nn.Module, cfg):
-    """Create optimizer and optional scheduler from experiment config."""
+    """Create optimizer and optional LR scheduler from experiment config."""
     optimizer = cfg.optimizer.cls(
         (p for p in model.parameters() if p.requires_grad),
         **cfg.optimizer.kwargs,
@@ -533,7 +544,7 @@ def build_optimizer_and_scheduler(model: nn.Module, cfg):
 
 
 def count_parameters(model: nn.Module) -> dict[str, int]:
-    """Return total and trainable parameter counts."""
+    """Count all model parameters and the subset that receives gradients."""
     return {
         "total": sum(p.numel() for p in model.parameters()),
         "trainable": sum(p.numel() for p in model.parameters() if p.requires_grad),
@@ -541,7 +552,7 @@ def count_parameters(model: nn.Module) -> dict[str, int]:
 
 
 def init_wandb_run(cfg, model: nn.Module | None = None, parameter_counts: dict[str, int] | None = None):
-    """Initialize W&B using the shared config, or return None when disabled."""
+    """Start a W&B run and log optional model metadata."""
     if not cfg.wandb.enabled or cfg.wandb.mode == "disabled":
         return None
 
@@ -561,6 +572,7 @@ def init_wandb_run(cfg, model: nn.Module | None = None, parameter_counts: dict[s
 
     wandb.define_metric("epoch")
     for metric_name in cfg.wandb.metric_allowlist:
+        # Explicitly tie allowed metrics to epoch for cleaner W&B charts.
         wandb.define_metric(metric_name, step_metric="epoch")
 
     if model is not None and cfg.wandb.watch_model:
@@ -578,7 +590,7 @@ def init_wandb_run(cfg, model: nn.Module | None = None, parameter_counts: dict[s
 
 
 def log_wandb_summary(wandb_run, cfg, summary_values: dict[str, Any]) -> None:
-    """Write summary values while respecting the config allowlist."""
+    """Write final/best metrics to the W&B run summary."""
     if wandb_run is None:
         return
 
@@ -596,7 +608,7 @@ def build_generated_examples_dataframe(
     tokenizer,
     cfg,
 ) -> Any:
-    """Generate captions for a fixed qualitative subset."""
+    """Build a table of reference and generated captions for inspection."""
     import pandas as pd
 
     generated_ids = generate_batch_token_ids(
@@ -669,6 +681,7 @@ def run_captioning_experiment(
     epochs_without_improvement = 0
 
     for epoch in range(1, cfg.train.epochs + 1):
+        # Training and validation both use teacher forcing; BLEU uses generate().
         train_metrics = train_one_epoch(
             model=model,
             loader=train_loader,
@@ -709,6 +722,7 @@ def run_captioning_experiment(
         if _is_better(current_value, best_value, cfg.train.best_mode, cfg):
             best_value = current_value
             best_epoch = epoch
+            # Keep a CPU copy so the best model can be restored after training.
             best_state = {k: v.detach().cpu().clone() for k, v in model.state_dict().items()}
             best_metrics = metrics.copy()
             epochs_without_improvement = 0
@@ -720,6 +734,7 @@ def run_captioning_experiment(
         history.append(metrics)
 
         if scheduler is not None:
+            # Config currently assumes metric-based schedulers such as ReduceLROnPlateau.
             scheduler_metric = metrics[cfg.scheduler.step_metric]
             scheduler.step(scheduler_metric)
 
@@ -781,6 +796,7 @@ def run_captioning_experiment(
     )
 
     if restore_best and best_state is not None:
+        # Final evaluation and qualitative examples should use the best weights.
         model.load_state_dict(best_state)
         torch.save(
             {
