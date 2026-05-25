@@ -501,3 +501,17 @@ def _is_better(value: float, best: float | None, mode: str, cfg: ICExperimentCon
     if mode == "min":
         return value < best - cfg.train.early_stopping_min_delta
     return value > best + cfg.train.early_stopping_min_delta
+
+def save_checkpoint(path, filename, model, cfg, extra=None):
+
+    model_cfg = cfg.model
+
+    payload = {
+        "model_name": getattr(model_cfg, "name", model.__class__.__name__),
+        "run_name": getattr(cfg.wandb, "run_name", None),
+        "model_config": asdict(model_cfg) if is_dataclass(model_cfg) else vars(model_cfg),
+        "state_dict": model.state_dict(),
+    }
+    if extra:
+        payload.update(extra)
+    torch.save(payload, Path(path) / filename)
