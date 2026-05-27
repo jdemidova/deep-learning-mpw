@@ -4,10 +4,15 @@ from __future__ import annotations
 import json
 import math
 import random
+import inspect
+import pathlib
+import sys
+import __main__
 from collections import defaultdict
 from dataclasses import asdict, is_dataclass
 from datetime import datetime
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 # third-party
@@ -386,6 +391,184 @@ def evaluate_bleu(
         ),
     }
 
+
+@torch.no_grad()
+def show_attend_tell_generate_beam(
+    self,
+    images: torch.Tensor,
+    max_len: int = 35,
+    bos_idx: int | None = None,
+    eos_idx: int | None = None,
+    beam_size: int = 3,
+    length_penalty: float = 0.7,
+    **_,
+) -> torch.Tensor:
+    """Beam search decoder for the trained Show, Attend and Tell model."""
+    self.eval()
+
+    bos_idx = self.bos_idx if bos_idx is None else bos_idx
+    eos_idx = self.eos_idx if eos_idx is None else eos_idx
+    beam_size = max(1, int(beam_size))
+
+    def normalized_score(score: float, token_ids: list[int]) -> float:
+        decoded_len = max(1, len(token_ids) - 1)  # ignore <bos>
+        return score / (decoded_len ** length_penalty)
+
+    generated_sequences = []
+
+    for image in images:
+        encoder_out = self.encoder(image.unsqueeze(0))
+        h, c = self.init_hidden_state(encoder_out)
+
+        beams = [([bos_idx], 0.0, h, c, False)]
+
+        for _ in range(max_len):
+            candidates = []
+
+            for token_ids, score, h_i, c_i, finished in beams:
+                if finished:
+                    candidates.append((token_ids, score, h_i, c_i, finished))
+                    continue
+
+                current_token = torch.tensor(
+                    [token_ids[-1]],
+                    dtype=torch.long,
+                    device=images.device,
+                )
+                context, _ = self.attention(encoder_out, h_i)
+                word_embedding = self.embedding(current_token)
+                lstm_input = torch.cat([word_embedding, context], dim=1)
+                next_h, next_c = self.lstm_cell(lstm_input, (h_i, c_i))
+
+                logits = self.output_layer(next_h)
+                log_probs = torch.log_softmax(logits, dim=-1).squeeze(0)
+                top_log_probs, top_token_ids = torch.topk(log_probs, k=beam_size)
+
+                for log_prob, next_token in zip(top_log_probs, top_token_ids):
+                    next_token = int(next_token.item())
+                    next_token_ids = token_ids + [next_token]
+                    next_score = score + float(log_prob.item())
+                    candidates.append(
+                        (
+                            next_token_ids,
+                            next_score,
+                            next_h,
+                            next_c,
+                            next_token == eos_idx,
+                        )
+                    )
+
+            beams = sorted(
+                candidates,
+                key=lambda item: normalized_score(item[1], item[0]),
+                reverse=True,
+            )[:beam_size]
+
+            if all(finished for _, _, _, _, finished in beams):
+                break
+
+        best_tokens, *_ = max(
+            beams,
+            key=lambda item: normalized_score(item[1], item[0]),
+        )
+        generated_sequences.append(best_tokens[1:])  # remove <bos>
+
+    max_generated_len = max(1, max(len(seq) for seq in generated_sequences))
+    padded_sequences = [
+        seq + [eos_idx] * (max_generated_len - len(seq))
+        for seq in generated_sequences
+    ]
+    return torch.tensor(padded_sequences, dtype=torch.long, device=images.device)
+
+
+@torch.no_grad()
+def show_and_tell_generate_beam(
+    self,
+    images: torch.Tensor,
+    max_len: int = 35,
+    bos_idx: int | None = None,
+    eos_idx: int | None = None,
+    beam_size: int = 3,
+    length_penalty: float = 0.7,
+    **_,
+) -> torch.Tensor:
+    """Beam search decoder for the notebook ShowAndTellCaptioner model."""
+    self.eval()
+
+    bos_idx = self.bos_idx if bos_idx is None else bos_idx
+    eos_idx = self.eos_idx if eos_idx is None else eos_idx
+    beam_size = max(1, int(beam_size))
+
+    def normalized_score(score: float, token_ids: list[int]) -> float:
+        decoded_len = max(1, len(token_ids) - 1)  # ignore <bos>
+        return score / (decoded_len ** length_penalty)
+
+    generated_sequences = []
+
+    for image in images:
+        image_features = self.encoder(image.unsqueeze(0))
+        image_embedding = self.image_projection(image_features).unsqueeze(1)
+
+        # First LSTM step consumes the image embedding, as in greedy decoding.
+        _, hidden = self.lstm(image_embedding)
+        beams = [([bos_idx], 0.0, hidden, False)]
+
+        for _ in range(max_len):
+            candidates = []
+
+            for token_ids, score, hidden_i, finished in beams:
+                if finished:
+                    candidates.append((token_ids, score, hidden_i, finished))
+                    continue
+
+                current_token = torch.tensor(
+                    [token_ids[-1]],
+                    dtype=torch.long,
+                    device=images.device,
+                )
+                word_embedding = self.embedding(current_token).unsqueeze(1)
+                output, next_hidden = self.lstm(word_embedding, hidden_i)
+
+                logits = self.output_layer(output.squeeze(1))
+                log_probs = torch.log_softmax(logits, dim=-1).squeeze(0)
+                top_log_probs, top_token_ids = torch.topk(log_probs, k=beam_size)
+
+                for log_prob, next_token in zip(top_log_probs, top_token_ids):
+                    next_token = int(next_token.item())
+                    next_token_ids = token_ids + [next_token]
+                    next_score = score + float(log_prob.item())
+                    candidates.append(
+                        (
+                            next_token_ids,
+                            next_score,
+                            next_hidden,
+                            next_token == eos_idx,
+                        )
+                    )
+
+            beams = sorted(
+                candidates,
+                key=lambda item: normalized_score(item[1], item[0]),
+                reverse=True,
+            )[:beam_size]
+
+            if all(finished for _, _, _, finished in beams):
+                break
+
+        best_tokens, *_ = max(
+            beams,
+            key=lambda item: normalized_score(item[1], item[0]),
+        )
+        generated_sequences.append(best_tokens[1:])  # remove <bos>
+
+    max_generated_len = max(1, max(len(seq) for seq in generated_sequences))
+    padded_sequences = [
+        seq + [eos_idx] * (max_generated_len - len(seq))
+        for seq in generated_sequences
+    ]
+    return torch.tensor(padded_sequences, dtype=torch.long, device=images.device)
+
+
 def collect_fixed_eval_subset(loader, cfg=None, num_images: int | None = None):
     """
     Collect fixed images for qualitative comparison.
@@ -438,6 +621,85 @@ def build_references_by_image_id(loader) -> dict[str, list[list[str]]]:
     return dict(references)
 
 
+def _call_with_supported_kwargs(fn, **kwargs):
+    """Call a model inference method with only the keyword args it supports."""
+    signature = inspect.signature(fn)
+    parameters = signature.parameters
+
+    if any(param.kind == inspect.Parameter.VAR_KEYWORD for param in parameters.values()):
+        return fn(**kwargs)
+
+    supported_kwargs = {
+        name: value
+        for name, value in kwargs.items()
+        if name in parameters
+    }
+    return fn(**supported_kwargs)
+
+
+def _build_generation_kwargs(images: torch.Tensor, cfg) -> dict[str, Any]:
+    """Collect generation settings from the experiment config."""
+    return {
+        "images": images,
+        "max_len": cfg.generation.max_len,
+        "bos_idx": cfg.model.bos_idx,
+        "eos_idx": cfg.model.eos_idx,
+    }
+
+
+def _generate_greedy(model: nn.Module, **generation_kwargs):
+    return _call_with_supported_kwargs(model.generate, **generation_kwargs)
+
+
+def _generate_beam(model: nn.Module, cfg, **generation_kwargs):
+    beam_kwargs = {
+        **generation_kwargs,
+        "beam_size": cfg.generation.beam_size,
+        "length_penalty": cfg.generation.length_penalty,
+        "decoding": "beam",
+    }
+
+    if hasattr(model, "generate_beam"):
+        return _call_with_supported_kwargs(model.generate_beam, **beam_kwargs)
+
+    if hasattr(model, "beam_search"):
+        return _call_with_supported_kwargs(model.beam_search, **beam_kwargs)
+
+    generate_signature = inspect.signature(model.generate)
+    generate_parameters = generate_signature.parameters
+    supports_beam_kwargs = any(
+        name in generate_parameters
+        for name in ("decoding", "beam_size", "length_penalty")
+    ) or any(
+        param.kind == inspect.Parameter.VAR_KEYWORD
+        for param in generate_parameters.values()
+    )
+
+    if supports_beam_kwargs:
+        return _call_with_supported_kwargs(model.generate, **beam_kwargs)
+
+    raise NotImplementedError(
+        "cfg.generation.decoding='beam' requires the model to implement "
+        "generate_beam(...), beam_search(...), or generate(...) with beam "
+        "parameters such as decoding, beam_size, or length_penalty."
+    )
+
+
+def _generate_from_config(model: nn.Module, images: torch.Tensor, cfg):
+    generation_kwargs = _build_generation_kwargs(images, cfg)
+    decoding = getattr(cfg.generation, "decoding", "greedy")
+
+    if decoding == "greedy":
+        return _generate_greedy(model, **generation_kwargs)
+
+    if decoding == "beam":
+        return _generate_beam(model, cfg, **generation_kwargs)
+
+    raise ValueError(
+        "cfg.generation.decoding must be either 'greedy' or 'beam', "
+        f"found {decoding!r}."
+    )
+
 @torch.no_grad()
 def generate_batch_token_ids(
     model: nn.Module,
@@ -451,15 +713,11 @@ def generate_batch_token_ids(
         model.generate(images, max_len, bos_idx, eos_idx)
     """
     device = resolve_device(cfg)
+    images = images.to(device, non_blocking=cfg.train.non_blocking)
 
     model.eval()
 
-    generated = model.generate(
-        images.to(device, non_blocking=cfg.train.non_blocking),
-        max_len=cfg.generation.max_len,
-        bos_idx=cfg.model.bos_idx,
-        eos_idx=cfg.model.eos_idx,
-    )
+    generated = _generate_from_config(model, images, cfg)
 
     if isinstance(generated, tuple):
         # Some models may return (token_ids, extra_info), e.g. attention maps.
@@ -527,6 +785,120 @@ def save_checkpoint(path, filename, model, cfg, extra=None):
     if extra:
         payload.update(extra)
     torch.save(payload, Path(path) / filename)
+
+
+def _torch_load_checkpoint(checkpoint_path: str | Path, map_location=None) -> Any:
+    """
+    Load local project checkpoints.
+
+    Use this only with checkpoints from a trusted source because PyTorch may
+    unpickle Python objects stored in older/full checkpoints.
+    """
+    checkpoint_path = Path(checkpoint_path)
+    checkpoint_dir = str(checkpoint_path.resolve().parent)
+    if checkpoint_dir not in sys.path:
+        sys.path.insert(0, checkpoint_dir)
+    if not sys.platform.startswith("win"):
+        pathlib.WindowsPath = pathlib.PosixPath
+    if not hasattr(__main__, "_convert_to_rgb"):
+        __main__._convert_to_rgb = lambda image: image.convert("RGB")
+    if not hasattr(__main__, "_resize_with_padding"):
+        __main__._resize_with_padding = lambda image, *args, **kwargs: image
+
+    try:
+        return torch.load(
+            checkpoint_path,
+            map_location=map_location,
+            weights_only=False,
+        )
+    except TypeError:
+        # Older PyTorch versions do not expose the weights_only argument.
+        return torch.load(checkpoint_path, map_location=map_location)
+
+
+def _extract_model_state_dict(checkpoint: Any) -> dict[str, torch.Tensor]:
+    """Return model weights from supported checkpoint payloads."""
+    if isinstance(checkpoint, dict):
+        if "state_dict" in checkpoint:
+            return checkpoint["state_dict"]
+        if "model_state_dict" in checkpoint:
+            return checkpoint["model_state_dict"]
+
+        # Allow loading files that contain a raw state_dict directly.
+        if checkpoint and all(torch.is_tensor(value) for value in checkpoint.values()):
+            return checkpoint
+
+    raise ValueError(
+        "Unsupported checkpoint format. Expected a dict with 'state_dict', "
+        "'model_state_dict', or a raw model state_dict."
+    )
+
+
+def load_checkpoint(
+    checkpoint_path: str | Path,
+    model: nn.Module,
+    *,
+    device: str | torch.device | None = None,
+    strict: bool = True,
+    eval_mode: bool = True,
+    return_checkpoint: bool = False,
+):
+    """
+    Load model weights from a .pth/.pt checkpoint into an existing model.
+
+    Supports checkpoints written by save_checkpoint(...) and the .pt payloads
+    written in run_captioning_experiment(...).
+    """
+    map_location = torch.device(device) if device is not None else None
+    checkpoint = _torch_load_checkpoint(checkpoint_path, map_location=map_location)
+    state_dict = _extract_model_state_dict(checkpoint)
+
+    model.load_state_dict(state_dict, strict=strict)
+    if device is not None:
+        model.to(map_location)
+    if eval_mode:
+        model.eval()
+
+    if return_checkpoint:
+        return model, checkpoint
+    return model
+
+
+def load_model_for_inference(
+    checkpoint_path: str | Path,
+    model_cls: type[nn.Module],
+    *,
+    cfg=None,
+    model_cfg=None,
+    device: str | torch.device | None = None,
+    strict: bool = True,
+    **model_kwargs,
+) -> nn.Module:
+    """
+    Instantiate a model class and load checkpoint weights for inference.
+
+    Prefer passing cfg or model_cfg from the current notebook. If neither is
+    provided, this falls back to the checkpoint's saved model_config dict.
+    """
+    map_location = torch.device(device) if device is not None else None
+    checkpoint = _torch_load_checkpoint(checkpoint_path, map_location=map_location)
+
+    if model_cfg is None:
+        model_cfg = getattr(cfg, "model", None) if cfg is not None else None
+    if model_cfg is None and isinstance(checkpoint, dict) and "model_config" in checkpoint:
+        model_cfg = SimpleNamespace(**checkpoint["model_config"])
+    if model_cfg is None:
+        raise ValueError("Pass cfg=..., model_cfg=..., or use a checkpoint with 'model_config'.")
+
+    model = model_cls(model_cfg, **model_kwargs)
+    return load_checkpoint(
+        checkpoint_path=checkpoint_path,
+        model=model,
+        device=device,
+        strict=strict,
+        eval_mode=True,
+        return_checkpoint=False,
+    )
 
 
 def build_optimizer_and_scheduler(model: nn.Module, cfg):
